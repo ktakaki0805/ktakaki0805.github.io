@@ -1,0 +1,13 @@
+---
+title: "タグ"
+toc: false
+number-sections: false
+listing:
+  id: tags
+  contents: "../posts/*/index.qmd"
+  sort: "date desc"
+  template: ../_templates/tag-list.ejs
+  date-format: "YYYY年M月D日"
+  fields: [title, date, categories]
+  page-size: 1000
+---

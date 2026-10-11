@@ -1,0 +1,36 @@
+<script>
+  // 狭い画面用に、左の目次を見出しブロックの直後へ複製する（表示は CSS で切り替える）
+  (() => {
+    const toc = document.querySelector('nav#TOC[role="doc-toc"]');
+    const header = document.querySelector('#title-block-header');
+    if (!toc || !header) return;
+    const clone = toc.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.removeAttribute('role');
+    clone.classList.add('toc-inline');
+    clone.setAttribute('aria-label', toc.querySelector('#toc-title')?.textContent || 'Contents');
+    clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    clone.querySelectorAll('.active').forEach((el) => el.classList.remove('active'));
+    clone.querySelectorAll('.collapse').forEach((el) => el.classList.remove('collapse'));
+    const title = clone.querySelector('h2');
+    if (title) {
+      const div = document.createElement('div');
+      div.className = 'toc-inline-title';
+      div.textContent = title.textContent;
+      title.replaceWith(div);
+    }
+    header.after(clone);
+  })();
+
+  // ナビの「タグ」は /tags/ とフォルダにリンクしているので、Quarto が現在地の印を付けない。ここで付ける
+  (() => {
+    const path = (url) => url.replace(/index\.html$/, '');
+    const here = path(location.pathname);
+    document.querySelectorAll('.navbar .nav-link').forEach((a) => {
+      if (a.origin === location.origin && path(a.pathname) === here) {
+        a.classList.add('active');
+        a.setAttribute('aria-current', 'page');
+      }
+    });
+  })();
+</script>

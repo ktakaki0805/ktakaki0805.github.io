@@ -1,0 +1,7 @@
+# posts/ 以下の記事すべてに適用される設定
+author: "ktakaki0805"
+# citation は Google Scholar 用のメタデータ（日付など）に使う。記事末尾の「引用する」欄は出さない
+citation: true
+appendix-cite-as: false
+google-scholar: true
+title-block-categories: true

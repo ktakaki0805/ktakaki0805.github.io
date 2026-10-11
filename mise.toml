@@ -1,0 +1,21 @@
+# 開発環境。`mise install` で Quarto・Python・uv が入り、`mise run <タスク名>` で各コマンドを実行できる。
+# GitHub Actions もこのファイルを読んで同じ版を使う。
+# 記事の中で実行する Python のパッケージは pyproject.toml と uv.lock で管理し、
+# 各タスクの `uv run` が .venv にそろえてから Quarto を動かす。
+
+[tools]
+"aqua:quarto-dev/quarto-cli" = "1.10.19"
+python = "3.13.15"
+uv = "0.12.19"
+
+[tasks.preview]
+description = "下書きも含めてプレビューする"
+run = "uv run quarto preview --profile drafts"
+
+[tasks.preview-public]
+description = "公開される記事だけでプレビューする"
+run = "uv run quarto preview"
+
+[tasks.render]
+description = "サイトを _site/ に書き出す"
+run = "uv run quarto render"

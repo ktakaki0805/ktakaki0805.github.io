@@ -1,0 +1,60 @@
+<%
+// トップページの記事一覧。年ごとにまとめ、左の欄にタグを置く。
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const plain = (s) => esc(String(s ?? '').replace(/[*_`$]/g, ''));
+const slug = (t) => 'tag-' + String(t).toLowerCase().replace(/\s+/g, '-');
+
+const years = {};
+for (const item of items) {
+  const y = String(item.date || '').slice(0, 4) || '—';
+  (years[y] = years[y] || []).push(item);
+}
+const yearKeys = Object.keys(years).sort().reverse();
+
+const counts = {};
+for (const item of items) for (const c of (item.categories || [])) counts[c] = (counts[c] || 0) + 1;
+const topTags = Object.entries(counts)
+  .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'))
+  .slice(0, 6).map(([t]) => t);
+%>
+```{=html}
+<div class="home-grid column-page-left">
+<nav class="home-nav" aria-label="絞り込み">
+<% if (topTags.length) { %>
+<div class="home-nav-group">
+<div class="home-nav-label">タグ</div>
+<ul>
+<% for (const t of topTags) { %>
+<li><a href="tags/#<%= esc(slug(t)) %>"><%= esc(t) %></a></li>
+<% } %>
+<li><a href="tags/">すべてのタグ →</a></li>
+</ul>
+</div>
+<% } %>
+</nav>
+<div class="post-list">
+<% if (!items.length) { %>
+<p class="post-list-empty">まだ記事はありません。</p>
+<% } %>
+<% for (const y of yearKeys) { %>
+<section class="post-year" aria-label="<%= esc(y) %>">
+<h2 class="post-year-title"><%= esc(y) %></h2>
+<ol>
+<% for (const item of years[y]) { %>
+<li>
+<a class="post-item" href="<%- item.path %>">
+<span class="post-item-date"><%= esc(String(item.date || '').slice(5)) %></span>
+<span class="post-item-body">
+<span class="post-item-title"><%= plain(item.title) %></span>
+<% if (item.subtitle) { %><span class="post-item-subtitle"><%= plain(item.subtitle) %></span><% } %>
+<% if ((item.categories || []).length) { %><span class="post-item-tags"><% for (const c of item.categories) { %><span><%= esc(c) %></span><% } %></span><% } %>
+</span>
+</a>
+</li>
+<% } %>
+</ol>
+</section>
+<% } %>
+</div>
+</div>
+```

@@ -1,0 +1,32 @@
+$if(hide-title-block)$
+$else$
+<header id="title-block-header" class="quarto-title-block post-header">
+$if(tag-links)$
+<div class="post-tags">
+$for(tag-links)$
+<a class="post-tag" href="$site-root$tags/#$tag-links.slug$">$tag-links.name$</a>
+$endfor$
+</div>
+$endif$
+$if(title)$
+<h1 class="title">$title$</h1>
+$endif$
+$if(subtitle)$
+<p class="subtitle">$subtitle$</p>
+$endif$
+$if(date)$
+<div class="post-meta">
+<span class="date">$date$</span>
+$if(reading-time-label)$
+<span class="reading-time">$reading-time-label$</span>
+$endif$
+</div>
+$endif$
+$if(summary)$
+<section class="abstract">
+<div class="block-title">$labels.abstract$</div>
+$summary$
+</section>
+$endif$
+</header>
+$endif$

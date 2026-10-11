@@ -1,0 +1,82 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - "*.qmd"
+
+# Python などのコードを実行する記事は、手元で計算した結果（_freeze/）をコミットし、
+# GitHub Actions では再計算しない
+execute:
+  freeze: auto
+
+website:
+  title: "ktakaki0805"
+  site-url: "https://ktakaki0805.github.io"
+  description: "ktakaki0805"
+  favicon: assets/favicon.svg
+  search: false
+  draft-mode: gone
+  navbar:
+    collapse: false
+    left: []
+    right:
+      - text: 記事
+        href: index.qmd
+      - text: タグ
+        href: /tags/
+      - text: RSS
+        href: index.xml
+  page-footer:
+    left: "© 2026 ktakaki0805"
+    right:
+      - text: RSS
+        href: index.xml
+      - text: GitHub
+        href: https://github.com/ktakaki0805
+
+lang: ja
+date-format: "YYYY年M月D日"
+
+language:
+  ja:
+    section-title-abstract: "要旨"
+    section-title-references: "参考文献"
+    section-title-footnotes: "注"
+    toc-title-document: "目次"
+    toc-title-website: "目次"
+  en:
+    toc-title-document: "Contents"
+    toc-title-website: "Contents"
+
+format:
+  html:
+    theme: [default, styles/blog.scss]
+    template-partials:
+      - _templates/title-block.html
+    include-in-header:
+      - assets/head.html
+    include-after-body:
+      - assets/after-body.html
+    html-math-method:
+      method: mathjax
+      url: "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml-nofont.js"
+    toc: true
+    toc-location: left
+    toc-depth: 2
+    number-sections: true
+    reference-location: margin
+    citation-location: document
+    fig-cap-location: margin
+    tbl-cap-location: top
+    # 表の列幅は区切り行の - の数ではなく、中身に合わせて自動で決める
+    tbl-colwidths: false
+    csl: assets/apa-en.csl
+    link-citations: true
+    code-copy: true
+    anchor-sections: false
+    smooth-scroll: true
+    filters:
+      - at: pre-render
+        path: filters/page-meta.lua
+      - at: post-render
+        path: filters/typeset.lua

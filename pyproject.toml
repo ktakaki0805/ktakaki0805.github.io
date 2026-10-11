@@ -1,0 +1,22 @@
+# 記事の中で実行する Python（```{python}）の環境。uv が .venv に入れる（mise.toml のタスクから使う）。
+# パッケージを足すときは `uv add <名前>` を実行し、pyproject.toml と uv.lock をコミットする。
+[project]
+name = "ktakaki0805-github-io"
+version = "0.0.0"
+requires-python = "==3.13.*"
+dependencies = [
+  # Quarto が Jupyter でコードを実行するのに使う
+  "ipykernel",
+  "nbclient",
+  "nbformat",
+  "pyyaml",
+  # 記事で使うパッケージ
+  "biopython",
+  "matplotlib",
+  "numpy",
+  "scipy",
+]
+
+[tool.uv]
+# このリポジトリ自体はパッケージとしてインストールしない
+package = false

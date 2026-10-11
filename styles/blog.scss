@@ -1,0 +1,1605 @@
+/*-- scss:defaults --*/
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans+JP:wght@400;500;600&family=Noto+Serif+JP:wght@400;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap");
+
+// 書体
+$font-family-serif: "STIX Two Text", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+$font-family-sans-serif: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+$font-family-monospace: "IBM Plex Mono", "IBM Plex Sans JP", ui-monospace, monospace;
+$font-family-base: $font-family-serif;
+$headings-font-family: $font-family-serif;
+$toc-font-family: $font-family-sans-serif;
+$navbar-font-family: $font-family-sans-serif;
+$footer-font-family: $font-family-sans-serif;
+
+$font-size-root: 17px;
+$font-size-base: 1rem;
+$line-height-base: 1.9;
+$headings-font-weight: 600;
+$headings-line-height: 1.5;
+$h1-font-size: 2.15rem;
+$h2-font-size: 1.42rem;
+$h3-font-size: 1.16rem;
+$h4-font-size: 1rem;
+
+// 色（ライト。ダークは scss:rules の CSS 変数で切り替える）
+$body-bg: #FFFFFF;
+$body-color: #1A1A1A;
+$link-color: #22489E;
+$link-decoration: underline;
+$code-color: #1A1A1A;
+$code-block-bg: #F6F6F5;
+$border-color: #E4E4E4;
+$navbar-bg: #FFFFFF;
+$navbar-fg: #5C5C5C;
+$navbar-hl: #1A1A1A;
+$footer-bg: #FFFFFF;
+$footer-fg: #5C5C5C;
+$toc-color: #5C5C5C;
+$toc-active-border: #1A1A1A;
+$toc-inactive-border: transparent;
+$border-radius: 4px;
+
+// 版面：目次 / 本文 680 / 傍注 240
+$grid-sidebar-width: 220px;
+$grid-body-width: 680px;
+$grid-margin-width: 240px;
+$grid-column-gutter-width: 48px;
+
+/*-- scss:rules --*/
+
+// ---------------------------------------------------------------------------
+// 色の変数。システムの設定（prefers-color-scheme）で切り替える
+// ---------------------------------------------------------------------------
+:root {
+  color-scheme: light;
+  --bg: #FFFFFF;
+  --fg: #1A1A1A;
+  --fg2: #5C5C5C;
+  --fg3: #3D3D3D;
+  --rule: #E4E4E4;
+  --rule2: #1A1A1A;
+  --code: #F6F6F5;
+  --code2: #EFEFED;
+  --ln: #6E6E6E;
+  --accent: #22489E;
+  --str: #8A4B14;
+  --cmt: #666666;
+  --box: #2B2B2B;
+  --arrow: #444444;
+  --fill: #E6E6E3;
+  --warn: #9C3A1E;
+  --warnbg: #FBF3EE;
+  --sel: #DCE3F3;
+  --img: none;
+
+  --serif: #{$font-family-serif};
+  --sans: #{$font-family-sans-serif};
+  --mono: #{$font-family-monospace};
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #15161A;
+    --fg: #E4E4E1;
+    --fg2: #A3A3A0;
+    --fg3: #C4C4C1;
+    --rule: #2E3035;
+    --rule2: #C4C4C1;
+    --code: #1E2024;
+    --code2: #272A2F;
+    --ln: #8A8A8A;
+    --accent: #8FB0F0;
+    --str: #E3AD78;
+    --cmt: #909090;
+    --box: #B8B8B5;
+    --arrow: #A6A6A3;
+    --fill: #2C2F35;
+    --warn: #F0A385;
+    --warnbg: #2B211C;
+    --sel: #2E3E63;
+    --img: brightness(0.88);
+  }
+}
+
+:root {
+  --bs-body-bg: var(--bg);
+  --bs-body-color: var(--fg);
+  --bs-emphasis-color: var(--fg);
+  --bs-secondary-color: var(--fg2);
+  --bs-border-color: var(--rule);
+  --bs-link-color: var(--accent);
+  --bs-link-color-rgb: none;
+  --bs-link-hover-color: var(--accent);
+  --bs-code-color: var(--fg);
+  --quarto-body-bg: var(--bg);
+  --quarto-body-color: var(--fg);
+  --quarto-text-muted: var(--fg2);
+  --quarto-border-color: var(--rule);
+
+  // Mermaid（Quarto の図はこの変数で色が決まる）
+  --mermaid-bg-color: var(--bg);
+  --mermaid-edge-color: var(--arrow);
+  --mermaid-node-fg-color: var(--box);
+  --mermaid-fg-color: var(--fg);
+  --mermaid-fg-color--lighter: var(--fg2);
+  --mermaid-fg-color--lightest: var(--rule);
+  --mermaid-node-bg-color: var(--bg);
+  --mermaid-label-bg-color: var(--bg);
+  --mermaid-label-fg-color: var(--fg);
+  --mermaid-font-family: var(--sans);
+  --mermaid-font-weight: 400;
+}
+
+// ---------------------------------------------------------------------------
+// 基本
+// ---------------------------------------------------------------------------
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--serif);
+  text-autospace: normal;
+  text-spacing-trim: trim-start;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: lining-nums;
+}
+
+::selection {
+  background: var(--sel);
+}
+
+a {
+  color: var(--accent);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.24em;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+
+  &:hover {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+  }
+}
+
+// 相互参照（式・図・表・節）は下線なし、色で示す
+a.quarto-xref,
+.citation a {
+  text-decoration-line: none;
+
+  &:hover {
+    text-decoration-line: underline;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 版面のグリッド
+//   広い画面   : [目次 192] 56 [本文 680] 48 [傍注 240]
+//   中くらい   : [目次 192] 56 [本文 680]（傍注は段落の後へ）
+//   狭い画面   : [本文]（目次は本文の前へ）
+// Quarto の列名（page-start, body-content-start, page-end など）はそのまま使う
+// ---------------------------------------------------------------------------
+:root {
+  --pad: clamp(20px, 2.5vw, 32px);
+  --toc-w: 192px;
+  --body-w: 680px;
+  --margin-w: 240px;
+}
+
+body .page-columns,
+body.floating .page-columns,
+body.fullcontent .page-columns,
+body.slimcontent .page-columns,
+body.listing .page-columns {
+  grid-template-columns:
+    [screen-start] minmax(var(--pad), 1fr)
+    [screen-start-inset page-start page-start-inset] var(--toc-w)
+    [body-start-outset body-start] 56px
+    [body-content-start] minmax(0, var(--body-w))
+    [body-content-end] 48px
+    [body-end body-end-outset] var(--margin-w)
+    [page-end-inset page-end screen-end-inset] minmax(var(--pad), 1fr)
+    [screen-end] !important;
+}
+
+@media (max-width: 1179.98px) {
+  body .page-columns,
+  body.floating .page-columns,
+  body.fullcontent .page-columns,
+  body.slimcontent .page-columns,
+  body.listing .page-columns {
+    grid-template-columns:
+      [screen-start] minmax(var(--pad), 1fr)
+      [screen-start-inset page-start page-start-inset] var(--toc-w)
+      [body-start-outset body-start] 48px
+      [body-content-start] minmax(0, var(--body-w))
+      [body-content-end body-end body-end-outset page-end-inset page-end screen-end-inset] minmax(var(--pad), 1fr)
+      [screen-end] !important;
+  }
+
+  .column-margin,
+  .margin-caption,
+  div.aside,
+  aside:not(.footnotes):not(.sidebar) {
+    grid-column: body-content-start / body-content-end !important;
+  }
+
+  .no-row-height {
+    height: initial !important;
+  }
+
+  .page-columns .column-page-right,
+  .page-columns.column-page-right > * {
+    grid-column: body-content-start / body-content-end !important;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body .page-columns,
+  body.floating .page-columns,
+  body.fullcontent .page-columns,
+  body.slimcontent .page-columns,
+  body.listing .page-columns {
+    grid-template-columns:
+      [screen-start] var(--pad)
+      [screen-start-inset page-start page-start-inset body-start-outset body-start body-content-start] minmax(0, 1fr)
+      [body-content-end body-end body-end-outset page-end-inset page-end screen-end-inset] var(--pad)
+      [screen-end] !important;
+  }
+}
+
+.sidebar nav[role="doc-toc"] ul > li > a,
+.sidebar nav[role="doc-toc"] ul > li > ul > li > a {
+  color: var(--fg2) !important;
+  border-left: 0 !important;
+}
+
+.sidebar nav[role="doc-toc"] ul > li > a.active,
+.sidebar nav[role="doc-toc"] ul > li > ul > li > a.active {
+  color: var(--fg) !important;
+  border-left: 0 !important;
+}
+
+// 左の目次（Quarto は #quarto-sidebar に置く）
+#quarto-sidebar {
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  overflow: visible !important;
+}
+
+// 狭い画面では、目次を見出しブロックの直後に出す（assets/after-body.html が複製する）
+nav.toc-inline {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  main.content nav.toc-inline {
+    display: block;
+    margin: 0 0 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+  }
+
+  .post-header {
+    margin-bottom: 40px;
+  }
+
+  #quarto-sidebar,
+  .quarto-secondary-nav {
+    display: none !important;
+  }
+}
+
+// 目次の「Contents」を本文のタグの行とそろえるため、Quarto が付ける上の余白を外す
+// （スクロールしたときに目次が止まる位置は、外した余白の分だけ top を下げて変えない）
+#quarto-sidebar nav[role="doc-toc"] {
+  position: sticky;
+  top: 113px;
+  padding-top: 0;
+
+  h2#toc-title {
+    padding-top: 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ヘッダー・フッター
+// ---------------------------------------------------------------------------
+#quarto-header {
+  background: var(--bg);
+  box-shadow: none;
+  border: 0;
+
+  .navbar {
+    background: var(--bg) !important;
+    padding: 12px clamp(20px, 2.5vw, 32px);
+    font-family: var(--sans);
+    font-size: 14px;
+    box-shadow: none;
+    border: 0;
+  }
+
+  .navbar-container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0 32px;
+  }
+
+  .navbar-brand {
+    margin: 0;
+    padding: 0;
+
+    .navbar-title {
+      color: var(--fg);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-size: 14px;
+    }
+  }
+
+  .navbar-collapse {
+    display: flex !important;
+    flex-basis: auto;
+    flex-grow: 0;
+  }
+
+  .navbar-nav {
+    flex-direction: row;
+    gap: 24px;
+    margin: 0 !important;
+
+    .nav-link {
+      color: var(--fg2);
+      padding: 12px 0;
+      text-decoration: none;
+
+      &.active,
+      &:hover {
+        color: var(--fg);
+      }
+    }
+  }
+
+  .navbar-toggler,
+  .quarto-navbar-tools,
+  #quarto-search {
+    display: none !important;
+  }
+}
+
+.nav-footer {
+  background: var(--bg);
+  .nav-footer-left,
+  .nav-footer-right {
+    padding: 0;
+  }
+
+  .nav-footer-left {
+    text-align: left;
+  }
+
+  border-top: 1px solid var(--rule);
+  color: var(--fg2);
+  font-family: var(--sans);
+  font-size: 13px;
+  max-width: 1216px;
+  margin: 120px auto 0;
+  padding: 16px 0 48px;
+  min-height: 0;
+
+  a,
+  .nav-link {
+    color: var(--fg2);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--fg);
+    }
+  }
+
+  .nav-footer-left,
+  .nav-footer-right {
+    flex: 1 1 auto;
+  }
+
+  .footer-items {
+    gap: 24px;
+  }
+
+  .nav-footer-center {
+    display: none;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+@media (max-width: 1279.98px) {
+  .nav-footer {
+    margin-left: clamp(20px, 2.5vw, 32px);
+    margin-right: clamp(20px, 2.5vw, 32px);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 記事の見出しブロック
+// ---------------------------------------------------------------------------
+// ナビバーから本文・目次までの余白は、ここの padding-top だけで決める。
+// Quarto は main にだけ上の余白（1em）を足し、各列にも 14px を足すので、どちらも消して目次と本文の上端をそろえる
+#quarto-content {
+  padding-top: 56px;
+
+  > * {
+    padding-top: 0;
+  }
+
+  > main.content {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 767.98px) {
+  #quarto-content {
+    padding-top: 40px;
+  }
+}
+
+.post-header {
+  margin-bottom: 64px;
+
+  .post-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    margin-bottom: 20px;
+    font-family: var(--sans);
+    font-size: 13px;
+    letter-spacing: 0.06em;
+  }
+
+  .post-tag {
+    color: var(--fg2);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--fg);
+    }
+  }
+
+  h1.title {
+    margin: 0;
+    font-size: clamp(1.65rem, 3.6vw, 2.15rem);
+    line-height: 1.45;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    font-feature-settings: "palt";
+    word-break: auto-phrase;
+    text-wrap: balance;
+  }
+
+  .subtitle {
+    margin: 16px 0 0;
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--fg2);
+    text-wrap: pretty;
+  }
+
+  .post-meta {
+    margin-top: 32px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--fg2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .abstract {
+    margin-top: 48px;
+    padding-top: 40px;
+    border-top: 1px solid var(--rule);
+
+    .block-title {
+      font-family: var(--sans);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      color: var(--fg2);
+      margin-bottom: 12px;
+    }
+
+    p {
+      font-size: 0.94rem;
+      line-height: 1.9;
+      text-align: justify;
+      margin: 0;
+    }
+  }
+}
+
+// タグ一覧など、日付のないページの見出し
+.quarto-title-block.post-header:not(:has(.post-meta)) {
+  margin-bottom: 64px;
+
+  h1.title {
+    font-size: clamp(1.6rem, 3.4vw, 2rem);
+    line-height: 1.3;
+    letter-spacing: 0;
+  }
+}
+
+// 見出しを出さないページ（トップ）では Quarto が空の header を補うので、余白を作らないよう隠す
+#title-block-header:empty {
+  display: none;
+}
+
+// ---------------------------------------------------------------------------
+// 目次（左）
+// ---------------------------------------------------------------------------
+#quarto-sidebar {
+  font-family: var(--sans);
+}
+
+nav[role="doc-toc"],
+nav.toc-inline {
+  font-family: var(--sans);
+
+  h2#toc-title,
+  .toc-inline-title {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    color: var(--fg2);
+    margin: 0 0 8px;
+    padding: 6px 0 0;
+    border: 0;
+  }
+
+  > ul {
+    border-left: 0;
+    padding-left: 0;
+    list-style: none;
+    margin: 0;
+  }
+
+  ul li a.nav-link,
+  > ul a {
+    display: flex;
+    gap: 10px;
+    padding: 6px 0 !important;
+    margin: 0;
+    border-left: 0 !important;
+    color: var(--fg2);
+    font-size: 13px;
+    line-height: 1.6;
+    text-decoration: none;
+
+    &.active {
+      color: var(--fg) !important;
+      font-weight: 500;
+    }
+
+    &:hover {
+      color: var(--fg) !important;
+    }
+  }
+
+  .header-section-number {
+    flex: none;
+    width: 1em;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 本文
+// ---------------------------------------------------------------------------
+main.content {
+  font-size: 1rem;
+  line-height: 1.9;
+
+  p,
+  li {
+    text-wrap: pretty;
+  }
+
+  > p,
+  .cell > p,
+  section > p {
+    text-align: justify;
+  }
+
+  h2 {
+    margin: 72px 0 24px;
+    padding: 0;
+    border: 0;
+    font-size: 1.42rem;
+    line-height: 1.5;
+    font-weight: 600;
+    font-feature-settings: "palt";
+  }
+
+  h3 {
+    margin: 56px 0 16px;
+    font-size: 1.16rem;
+    line-height: 1.6;
+    font-weight: 600;
+    font-feature-settings: "palt";
+  }
+
+  h4 {
+    margin: 40px 0 12px;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  h2,
+  h3 {
+    .header-section-number {
+      color: var(--fg2);
+      font-weight: 400;
+      margin-right: 0.75em;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  section:first-of-type > h2 {
+    margin-top: 0;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  // 和文の強調は傍点（filters/typeset.lua が和文を含む強調に class="ja" を付ける）
+  em.ja {
+    font-style: normal;
+    text-emphasis: filled sesame;
+    -webkit-text-emphasis: filled sesame;
+    text-emphasis-position: over right;
+  }
+
+  del {
+    color: var(--fg2);
+  }
+
+  kbd {
+    font-family: var(--mono);
+    font-size: 0.78em;
+    padding: 0.1em 0.45em;
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+    box-shadow: none;
+  }
+
+  blockquote {
+    margin: 2em 0;
+    padding: 0 0 0 2em;
+    border: 0;
+    color: var(--fg);
+    font-size: 1.04rem;
+    font-style: italic;
+
+    &:lang(ja) {
+      font-style: normal;
+    }
+  }
+
+  hr {
+    width: 64px;
+    margin: 3em auto;
+    border: 0;
+    border-top: 1px solid var(--rule2);
+    opacity: 1;
+  }
+
+  ul {
+    padding-left: 1.4em;
+    list-style-type: "–  ";
+  }
+
+  ol {
+    padding-left: 1.6em;
+  }
+
+  li::marker {
+    color: var(--fg2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  dl dt {
+    font-weight: 600;
+  }
+
+  dl dd {
+    margin-left: 2em;
+  }
+
+  .task-list {
+    list-style: none;
+    padding-left: 0;
+  }
+}
+
+// 英語の記事
+html:lang(en) main.content {
+  font-size: 19px;
+  line-height: 1.65;
+
+  p,
+  li,
+  > p,
+  section > p {
+    text-align: left;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+  }
+
+  h2 {
+    font-size: 1.3em;
+    line-height: 1.35;
+    margin: 72px 0 20px;
+  }
+
+  h3 {
+    font-size: 1.1em;
+    line-height: 1.4;
+  }
+}
+
+html:lang(en) .post-header {
+  h1.title {
+    font-size: clamp(1.9rem, 3.4vw, 2.25rem);
+    line-height: 1.25;
+    letter-spacing: -0.005em;
+  }
+
+  .subtitle {
+    font-size: 1.2rem;
+    line-height: 1.5;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 数式（MathJax v4 / STIX Two）
+// ---------------------------------------------------------------------------
+mjx-container[display="true"] {
+  margin: 1.6em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+mjx-container {
+  color: var(--fg);
+}
+
+// ---------------------------------------------------------------------------
+// 傍注（脚注を本文の横に出す）
+// ---------------------------------------------------------------------------
+.column-margin,
+.margin-caption {
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: var(--fg3);
+  text-wrap: pretty;
+}
+
+.column-margin {
+  > div[id^="fn"] p,
+  p {
+    margin: 0 0 1em;
+    padding-top: 0.3em;
+  }
+
+  sup {
+    color: var(--accent);
+    font-size: 1em;
+    vertical-align: baseline;
+    font-family: var(--serif);
+    margin-right: 0.35em;
+  }
+}
+
+a.footnote-ref {
+  text-decoration: none;
+
+  sup {
+    font-family: var(--serif);
+    font-size: 0.68em;
+    margin-left: 0.1em;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 図・表
+// ---------------------------------------------------------------------------
+.quarto-figure,
+.quarto-float {
+  margin: 48px 0;
+}
+
+// 図・表は div.quarto-float の中に figure.quarto-float が入れ子になる。
+// figure は inline-block なので余白が重ならず二重になるため、外側の div だけに付ける
+figure,
+figure.quarto-float {
+  margin: 0;
+}
+
+main.content img {
+  max-width: 100%;
+  height: auto;
+}
+
+main.content img:not([src$=".svg"]) {
+  filter: var(--img);
+}
+
+figcaption,
+.figure-caption,
+.quarto-float-caption,
+.margin-caption {
+  font-family: var(--sans);
+  font-size: 0.8rem !important;
+  line-height: 1.75;
+  color: var(--fg3) !important;
+  text-align: left !important;
+  text-wrap: pretty;
+}
+
+.caption-label {
+  font-weight: 600;
+  color: var(--fg);
+  margin-right: 0.9em;
+}
+
+// 傍注欄に置いたキャプションは、図の下端にそろえる
+.quarto-float-caption-margin,
+figcaption.margin-caption {
+  .caption-label {
+    display: block;
+    margin: 0 0 4px;
+  }
+}
+
+.quarto-float-caption-bottom,
+.column-page-right figcaption {
+  margin-top: 20px;
+  max-width: 680px;
+}
+
+.column-page-right .caption-label {
+  display: inline !important;
+  margin: 0 0.9em 0 0 !important;
+}
+
+@media (max-width: 1179.98px) {
+  .quarto-float-caption-margin .caption-label,
+  figcaption.margin-caption .caption-label {
+    display: inline;
+    margin: 0 0.9em 0 0;
+  }
+
+  .quarto-float-caption-margin,
+  figcaption.margin-caption {
+    margin-top: 16px;
+  }
+}
+
+.quarto-float-caption-top {
+  margin-bottom: 16px;
+  max-width: 680px;
+}
+
+// 表（ブックタブ形式：上下に太い罫、見出しの下に細い罫）
+main.content table,
+main.content .table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  background: transparent;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--fg);
+  border-top: 1.5px solid var(--rule2);
+  border-bottom: 1.5px solid var(--rule2);
+
+  > :not(caption) > * > * {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 4px 24px 4px 0;
+  }
+
+  thead {
+    border-bottom: 1px solid var(--rule2);
+
+    th {
+      font-weight: 600;
+      padding-top: 10px;
+      padding-bottom: 10px;
+      border: 0;
+    }
+  }
+
+  tbody tr:first-child td {
+    padding-top: 10px;
+  }
+
+  tbody tr:last-child td {
+    padding-bottom: 10px;
+  }
+
+  td:last-child,
+  th:last-child {
+    padding-right: 0;
+  }
+}
+
+main.content .table > :not(:first-child) {
+  border-top: 0;
+}
+
+.quarto-float-tbl,
+.quarto-float figure.figure {
+  overflow-x: auto;
+}
+
+// ---------------------------------------------------------------------------
+// コード
+// ---------------------------------------------------------------------------
+code {
+  font-family: var(--mono);
+  color: var(--fg);
+}
+
+p code:not(.sourceCode),
+li code:not(.sourceCode),
+td code:not(.sourceCode) {
+  font-size: 0.86em;
+  background: var(--code2);
+  color: var(--fg);
+  padding: 0.12em 0.4em;
+  border-radius: 3px;
+}
+
+div.sourceCode,
+pre.sourceCode,
+.code-with-filename .code-with-filename-file {
+  background: var(--code);
+  border: 0;
+  border-radius: 4px;
+}
+
+div.sourceCode {
+  margin: 40px 0;
+}
+
+pre.sourceCode,
+div.sourceCode pre {
+  padding: 20px 22px;
+  font-size: 0.8rem;
+  line-height: 1.75;
+  color: var(--fg);
+  text-autospace: no-autospace;
+  overflow-x: auto;
+}
+
+html:lang(en) main.content pre.sourceCode {
+  font-size: 0.72em;
+}
+
+.code-with-filename {
+  margin: 40px 0;
+
+  .code-with-filename-file {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: transparent;
+    padding: 0 0 6px 2px;
+    margin: 0;
+    border: 0;
+
+    pre {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--fg2);
+      line-height: 1.5;
+    }
+
+    &::after {
+      font-family: var(--sans);
+      font-size: 12.5px;
+      letter-spacing: 0.04em;
+      color: var(--fg2);
+      margin-right: 48px;
+    }
+  }
+
+  div.sourceCode {
+    margin: 0;
+  }
+}
+
+.code-with-filename:has(pre.python) .code-with-filename-file::after { content: "Python"; }
+.code-with-filename:has(pre.julia) .code-with-filename-file::after { content: "Julia"; }
+.code-with-filename:has(pre.r) .code-with-filename-file::after { content: "R"; }
+.code-with-filename:has(pre.bash) .code-with-filename-file::after { content: "Shell"; }
+.code-with-filename:has(pre.cpp) .code-with-filename-file::after { content: "C++"; }
+.code-with-filename:has(pre.rust) .code-with-filename-file::after { content: "Rust"; }
+.code-with-filename:has(pre.lean) .code-with-filename-file::after { content: "Lean"; }
+
+// 行番号
+pre.numberSource code > span > a:first-child::before,
+.sourceCode .number-source code > span > a:first-child::before {
+  color: var(--ln);
+}
+
+pre.numberSource {
+  margin-left: 0 !important;
+  padding-left: 20px !important;
+  border-left: 0 !important;
+}
+
+pre.numberSource code > span {
+  left: -1em;
+}
+
+pre.numberSource code > span > a:first-child::before {
+  border-right: 0 !important;
+  padding: 0 1.2em 0 0 !important;
+}
+
+// コピーボタン
+.code-copy-button {
+  color: var(--fg2) !important;
+  background: transparent !important;
+  border: 0 !important;
+  top: 8px !important;
+  right: 8px !important;
+  width: 44px;
+  height: 44px;
+}
+
+// 構文の色分け（アクセント色1色と、文字列・数値の茶、コメントの灰）
+// Quarto の配色（quarto-syntax-highlighting.css）を、ダークモードでも読める色に置き換える
+div.sourceCode,
+div.sourceCode pre.sourceCode,
+pre > code.sourceCode > span,
+code.sourceCode > span,
+code span {
+  color: var(--fg) !important;
+}
+
+div.sourceCode code span {
+  &.kw,
+  &.cf,
+  &.im,
+  &.ex {
+    color: var(--accent) !important;
+    font-weight: 400 !important;
+  }
+
+  &.st,
+  &.dv,
+  &.fl,
+  &.bn,
+  &.ch,
+  &.ss,
+  &.vs,
+  &.dt,
+  &.cn,
+  &.sc {
+    color: var(--str) !important;
+  }
+
+  &.co,
+  &.cv,
+  &.do,
+  &.an,
+  &.in,
+  &.wa {
+    color: var(--cmt) !important;
+    font-style: normal !important;
+  }
+
+  &.fu {
+    color: var(--fg) !important;
+    font-weight: 500 !important;
+  }
+
+  &.op,
+  &.va,
+  &.bu,
+  &.ot,
+  &.at,
+  &.pp {
+    color: var(--fg) !important;
+  }
+
+  &.al,
+  &.er {
+    color: var(--warn) !important;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 命題・証明・注記
+// ---------------------------------------------------------------------------
+.theorem,
+.proposition,
+.lemma,
+.corollary,
+.definition {
+  margin: 2.2em 0 0;
+  padding: 1.2em 0 0.2em;
+  border-top: 1px solid var(--rule2);
+
+  > p:first-child > .theorem-title,
+  .theorem-title {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.9em;
+    font-style: normal;
+    margin-right: 1em;
+  }
+}
+
+.proof {
+  margin: 0 0 2.2em;
+  padding: 0 0 0.4em;
+  border-bottom: 1px solid var(--rule);
+
+  .proof-title {
+    font-family: var(--sans);
+    font-size: 0.9em;
+    font-style: normal;
+    color: var(--fg2);
+    margin-right: 1em;
+  }
+}
+
+.callout {
+  margin: 2em 0;
+  border: 0 !important;
+  border-radius: 4px;
+  background: var(--code) !important;
+  box-shadow: none;
+  padding: 0;
+
+  .callout-header {
+    background: transparent !important;
+    border: 0;
+    padding: 16px 22px 0;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+  }
+
+  .callout-title-container {
+    font-weight: 500;
+  }
+
+  .callout-icon::before {
+    filter: none;
+  }
+
+  .callout-body-container,
+  .callout-body {
+    padding: 6px 22px 18px;
+    font-size: 0.94em;
+    line-height: 1.85;
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &.callout-warning,
+  &.callout-caution,
+  &.callout-important {
+    background: var(--warnbg) !important;
+
+    .callout-header {
+      color: var(--warn);
+    }
+  }
+}
+
+details {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  margin: 2em 0;
+
+  summary {
+    cursor: pointer;
+    padding: 12px 0;
+    font-size: 0.94em;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 参考文献・付録
+// ---------------------------------------------------------------------------
+#quarto-appendix.default {
+  border-top: 1px solid var(--rule);
+  margin-top: 88px;
+  padding-top: 28px;
+  background: transparent;
+  font-family: var(--serif);
+
+  section {
+    margin-bottom: 56px;
+  }
+
+  .quarto-appendix-heading,
+  h2 {
+    font-family: var(--sans);
+    font-size: 12px !important;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    color: var(--fg2);
+    margin: 0 0 16px !important;
+    padding: 0;
+    border: 0;
+  }
+
+  .quarto-appendix-contents {
+    font-size: 0.86rem;
+    line-height: 1.75;
+    color: var(--fg3);
+  }
+}
+
+#refs,
+.csl-bib-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-autospace: no-autospace;
+
+  .csl-entry {
+    padding-left: 2em;
+    text-indent: -2em;
+    margin: 0;
+    // DOI などの長い URL が狭い画面ではみ出さないよう、必要なときだけ途中で折り返す
+    overflow-wrap: anywhere;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mermaid
+// ---------------------------------------------------------------------------
+.cell-output-display svg,
+pre.mermaid-js + svg,
+div.mermaid svg {
+  max-width: 100%;
+}
+
+.quarto-float .mermaid,
+.cell-output-display {
+  overflow-x: auto;
+}
+
+svg.mermaid-js {
+  .edgeLabel,
+  .edgeLabel p,
+  .labelBkg {
+    background-color: var(--bg) !important;
+  }
+
+  .edgeLabel rect {
+    fill: var(--bg) !important;
+  }
+
+  .edgeLabel {
+    color: var(--fg2) !important;
+    font-size: 13px;
+  }
+
+  .nodeLabel {
+    font-size: 14px;
+  }
+}
+
+// 狭い画面では図を縮めず、横にスクロールさせる
+@media (max-width: 767.98px) {
+  svg.mermaid-js {
+    min-width: 600px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// トップ・タグ一覧
+// ---------------------------------------------------------------------------
+.home-grid {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 56px;
+  row-gap: 40px;
+  align-items: flex-start;
+}
+
+main.content .home-nav ul,
+main.content .post-list ol,
+main.content .tag-sections ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-nav {
+  flex: 1 1 192px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 16px;
+  }
+
+  li {
+    flex: 1 0 150px;
+  }
+
+  a {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    color: var(--fg2);
+    text-decoration: none;
+
+    &:hover,
+    &[aria-current] {
+      color: var(--fg);
+    }
+
+    &[aria-current] {
+      font-weight: 500;
+    }
+  }
+
+  .count {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg2);
+  }
+
+  .tag-index a {
+    color: var(--fg);
+  }
+}
+
+.home-nav-label {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--fg2);
+  padding: 6px 0;
+}
+
+.post-list,
+.tag-sections {
+  flex: 999 1 560px;
+  min-width: 0;
+  max-width: 680px;
+
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+.post-year + .post-year {
+  margin-top: 72px;
+}
+
+main.content .post-year-title {
+  margin: 0 !important;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--rule2);
+  font-family: var(--serif);
+  font-size: 15px !important;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--fg2);
+}
+
+.post-list li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.post-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  padding: 24px 0;
+  color: var(--fg);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--fg);
+
+    .post-item-title {
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.24em;
+    }
+  }
+}
+
+.post-item-date {
+  flex: 0 0 4.6em;
+  padding-top: 0.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg2);
+}
+
+.post-item-body {
+  flex: 1 1 360px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.post-item-title {
+  font-size: 1.12rem;
+  line-height: 1.6;
+  font-weight: 600;
+  font-feature-settings: "palt";
+}
+
+.post-item-subtitle {
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--fg2);
+}
+
+.post-item-body:lang(en) {
+  .post-item-title {
+    font-size: 1.16rem;
+    line-height: 1.45;
+    font-feature-settings: normal;
+  }
+
+  .post-item-subtitle {
+    font-size: 0.96rem;
+    line-height: 1.55;
+  }
+}
+
+.post-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fg2);
+}
+
+.post-list-empty {
+  color: var(--fg2);
+}
+
+.tag-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+}
+
+.tag-section {
+  scroll-margin-top: 96px;
+}
+
+main.content .tag-section-title {
+  margin: 0 !important;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--rule2);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 1.12rem !important;
+  line-height: 1.5;
+  font-weight: 600;
+
+  .count {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--fg2);
+  }
+}
+
+.tag-section li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.tag-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 24px;
+  padding: 14px 0;
+  color: var(--fg);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--fg);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+  }
+}
+
+.tag-item-date {
+  flex: 0 0 8em;
+  padding-top: 0.3em;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg2);
+}
+
+.tag-item-title {
+  flex: 1 1 300px;
+  min-width: 0;
+  line-height: 1.65;
+}
+
+// ---------------------------------------------------------------------------
+// Quarto の部品で使わないもの
+// ---------------------------------------------------------------------------
+.quarto-title-meta-heading,
+.quarto-categories,
+#quarto-margin-sidebar:empty {
+  display: none;
+}
+
+.anchorjs-link {
+  display: none;
+}

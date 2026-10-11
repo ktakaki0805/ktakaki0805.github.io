@@ -1,0 +1,41 @@
+<%
+// タグ一覧。タグごとに記事をまとめ、左の欄に件数つきの目次を置く。
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const plain = (s) => esc(String(s ?? '').replace(/[*_`$]/g, ''));
+const slug = (t) => 'tag-' + String(t).toLowerCase().replace(/\s+/g, '-');
+
+const groups = {};
+for (const item of items) for (const c of (item.categories || [])) (groups[c] = groups[c] || []).push(item);
+const tags = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b, 'ja'));
+%>
+```{=html}
+<div class="home-grid column-page-left">
+<nav class="home-nav" aria-label="タグ一覧">
+<ul class="tag-index">
+<% for (const t of tags) { %>
+<li><a href="#<%= esc(slug(t)) %>"><span><%= esc(t) %></span><span class="count"><%= groups[t].length %></span></a></li>
+<% } %>
+</ul>
+</nav>
+<div class="tag-sections">
+<% if (!tags.length) { %>
+<p class="post-list-empty">まだタグはありません。</p>
+<% } %>
+<% for (const t of tags) { %>
+<section class="tag-section" id="<%= esc(slug(t)) %>">
+<h2 class="tag-section-title"><span><%= esc(t) %></span><span class="count"><%= groups[t].length %>件</span></h2>
+<ol>
+<% for (const item of groups[t]) { %>
+<li>
+<a class="tag-item" href="<%- item.path %>">
+<span class="tag-item-date"><%= esc(item.date) %></span>
+<span class="tag-item-title"><%= plain(item.title) %></span>
+</a>
+</li>
+<% } %>
+</ol>
+</section>
+<% } %>
+</div>
+</div>
+```

@@ -1,0 +1,1819 @@
+---
+title: "概日リズムの温度補償について"
+subtitle: "シアノバクテリアの概日リズムの温度補償を、数式とシミュレーションで読み解く"
+date: 2026-10-16
+lang: ja
+categories: [システム生物学, 概日リズム]
+bibliography: references.bib
+format:
+  html:
+    toc: true
+    fig-align: center
+jupyter: python3
+execute:
+  freeze: auto
+  warning: false
+---
+
+```{python}
+#| include: false
+import logging
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
+_available = {f.name for f in font_manager.fontManager.ttflist}
+_jp_fonts = [f for f in ["Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans",
+                         "Hiragino Kaku Gothic ProN", "Yu Gothic", "IPAexGothic"]
+             if f in _available]
+
+BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
+INK2, MUTED, GRID = "#52514e", "#8a8984", "#e4e3df"
+plt.rcParams.update({
+    "font.family": _jp_fonts + ["sans-serif"],
+    "font.size": 10.5, "axes.unicode_minus": False,
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.edgecolor": MUTED, "axes.labelcolor": INK2,
+    "xtick.color": INK2, "ytick.color": INK2,
+    "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.8,
+    "lines.linewidth": 1.8, "legend.frameon": False,
+    "figure.dpi": 110, "savefig.dpi": 150,
+})
+```
+
+```{=html}
+<style>
+/* 図を本文の幅に収める（サイト共通の CSS にある場合は不要） */
+figure img, .cell-output-display img { max-width: 100%; height: auto; }
+</style>
+```
+
+## はじめに：時計はなぜ温度で狂わないのか {#sec-intro}
+
+私たちの体温やホルモンの分泌、眠気の波には、およそ24時間の周期があります。植物の葉の開閉にも、カビの胞子の形成にも、そして単細胞の細菌にさえ、同じような約1日のリズムが見つかっています。こうしたリズムは、ラテン語で「およそ1日」を意味する言葉から、概日リズム（circadian rhythm）と呼ばれます。
+
+ただし、約24時間の周期で何かが変動するだけでは、概日リズムとは呼びません。概日リズムには、3つの性質があることが知られています。1つ目は、明るさや温度を一定に保った環境でも、約24時間の周期で振動し続けることです（自律振動）。生物は外の昼夜を毎日なぞっているのではなく、体の中に時計を持っているということです。2つ目は、昼夜の明暗や温度の周期に合わせて、時計の位相をずらせることです（同調）。体内時計の周期はちょうど24時間ではないので、毎日少しずつ合わせ直す必要があります。3つ目は、周囲の温度が変わっても、周期がほとんど変わらないことです（温度補償）。
+
+3つの中でいちばん不思議なのは、温度補償です。化学反応の速さは温度に強く依存し、生体内の多くの反応は、温度が10 °C上がるとおよそ2〜3倍速くなります。この倍率を温度係数 Q~10~ と呼びます。体内時計も、タンパク質の結合やリン酸化といった化学反応の積み重ねで動いているはずです。それなら、暖かい日には時計が速く進み、寒い日には遅れてもおかしくありません。ところが実際の概日リズムでは、周期の Q~10~ はおよそ0.8〜1.2に収まります^[この記事では、周期の Q~10~ を $\tau(T)/\tau(T+10\,^\circ\mathrm{C})$ と定義します。温度が上がって周期が短くなる（時計が速く進む）と1より大きくなり、普通の化学反応の Q~10~ と同じ向きの値になります。文献によっては逆数の $\tau(T+10\,^\circ\mathrm{C})/\tau(T)$ を使うもの [@fu2024] もあるので、数値を比べるときは注意が必要です。]。部品は温度に敏感なのに、それを組み上げた時計は温度に鈍感なのです。
+
+この性質は、2つ目の同調とどこか矛盾しているようにも見えます。温度の周期に同調するには、時計は温度の変化を感じ取れなければなりません。一方で温度補償のためには、温度に鈍感でなければなりません。温度を感じながら、温度に左右されない。この2つがどうして両立するのかという問いには、記事の終わりで立ち戻ります。
+
+この謎に迫るうえで、シアノバクテリア（ラン藻）は特別な生物です。シアノバクテリアは光合成をする細菌で、1993年には、発光遺伝子を目印にした実験で、その遺伝子発現に概日リズムがあり、周期が温度補償されていることが示されました [@kondo1993]。この時計の中心にあるのが、KaiA、KaiB、KaiC という3つのタンパク質です。
+
+驚くべきことに2005年には、この3つのタンパク質と ATP を試験管の中で混ぜるだけで、KaiC のリン酸化の程度がおよそ1日の周期で振動することが示されました [@nakajima2005]。その周期は 25 °C、30 °C、35 °C でそれぞれ約22、21、20時間で、Q~10~ は約1.1でした。遺伝子の転写も翻訳もなく、細胞すらない試験管の中で、温度補償された時計が動いているのです。
+
+試験管の中の3つのタンパク質で温度補償が起きるなら、その仕組みを分子と数式の両面から追いかけることができます。この記事では、システム生物学の考え方を使ってこの問いに取り組みます。ここでいうシステム生物学の考え方とは、ひとつの分子の性質だけでなく、反応がつながったネットワーク全体の振る舞いとして、時計の性質を理解しようとする立場のことです。まず KaiABC 時計のしくみを確認し、温度補償の条件を数式で書き表します。次に、その数式を、実際の時計のモデルを Python で動かしながら確かめていきます。そのうえで、周期だけでなく、振動の大きさ（振幅）が温度でどう変わるかにも目を向けて、温度に左右されない時計が同時に温度を感じられる仕組みを3通り考え、実験データや、反応ごとに測られた温度依存性と突き合わせます。記事中のコードはすべて、そのまま実行して図を再現できるようにしてあります。
+
+## KaiABC 振動子のしくみ {#sec-kai}
+
+主役の KaiC は、6つのサブユニットが集まってできたリング状のタンパク質（六量体）です。各サブユニットは CI と CII という2つのドメインからなり、六量体全体としては、CI のリングと CII のリングが2段に重なった、縦横およそ 10 nm の形をしています（@fig-kaic の (a)）[@pattanayek2004; @egli2013]。どちらのドメインにも ATP が結合し、六量体全体では12個の ATP が、隣り合うサブユニットの境目に挟まれるように結合しています。
+
+KaiC は、自分自身をリン酸化し、また脱リン酸化する能力を持っています。リン酸化されるのは、CII ドメインにある431番目のセリン（S431）と432番目のトレオニン（T432）の2か所です。そのため KaiC のサブユニットは、どちらもリン酸化されていない U 型、T432 だけがリン酸化された T 型、両方がリン酸化された ST 型、S431 だけがリン酸化された S 型の、4つの状態をとります。試験管の中の振動では、この4つの状態が決まった順番で移り変わります。まず T432 がリン酸化されて T 型になり、次に S431 もリン酸化されて ST 型になります。続いて T432 のリン酸が外れて S 型になり、最後に S431 のリン酸も外れて U 型に戻ります [@nishiwaki2007; @rust2007]。
+
+```{python}
+#| label: fig-kaic
+#| fig-cap: "KaiC 六量体の立体構造（PDB 1TF7）[@pattanayek2004]。（a）横から見た六量体。CI（青）のリングと CII（オレンジ）のリングが2段に重なっている。6つのサブユニットは色の濃淡で区別した。CII のリングの側面に見える青い帯は、CI から CII へつながるリンカー。（b）CII のリングを S431・T432 の高さで輪切りにし、CII の側から見下ろした断面。CII に結合した ATP は切らずに描いた。N 末端の13残基と C 末端の22残基は、この結晶構造では位置が決まっていない。原子座標から Python（Biopython、NumPy、Matplotlib）で描画した。"
+#| fig-width: 10.5
+#| fig-height: 5.4
+#| code-fold: true
+#| code-summary: "図のコード（PDB 1TF7 の原子座標から描画）"
+from Bio.PDB import MMCIFParser
+from matplotlib.patches import Patch
+
+# --- 構造の読み込み（PDB 1TF7） ---------------------------------------------
+CI_END = 260                     # 残基 1–260：CI（CII へつながるリンカーを含む）
+VDW = {"C": 1.7, "N": 1.55, "O": 1.52, "S": 1.8, "P": 1.8}
+records = []
+for chain in MMCIFParser(QUIET=True).get_structure("KaiC", "1TF7.cif")[0]:
+    for res in chain:
+        het, num, _ = res.id
+        if het == " ":
+            kind = "phos" if num in (431, 432) else ("CI" if num <= CI_END else "CII")
+        elif res.get_resname() == "ATP":
+            kind = "ATP_CII" if num % 10 == 1 else "ATP_CI"   # このファイルでは x901 が CII 側、x903 が CI 側
+        else:
+            continue                                         # 水分子など
+        for atom in res:
+            records.append((chain.id, kind, atom.element, num, atom.get_id(), *atom.coord))
+chain_ids = sorted({r[0] for r in records})
+chain_no = np.array([chain_ids.index(r[0]) for r in records])
+kind = np.array([r[1] for r in records])
+xyz = np.array([r[5:8] for r in records], float)
+radius = np.array([VDW.get(r[2], 1.7) for r in records]) * 1.2
+
+atom_name = np.array([r[4] for r in records])
+
+# CII に結合した ATP の末端のリン（PG）と、いちばん近い T432 の側鎖の酸素（OG1）との距離
+pg = xyz[(kind == "ATP_CII") & (atom_name == "PG")]
+og1 = xyz[(kind == "phos") & (atom_name == "OG1")]
+d_atp_t432 = np.linalg.norm(pg[:, None, :] - og1[None, :, :], axis=2).min(axis=1)
+
+center = xyz.mean(axis=0)
+axis = xyz[kind == "CII"].mean(axis=0) - xyz[kind == "CI"].mean(axis=0)   # 六回対称軸（CI → CII の向き）
+axis /= np.linalg.norm(axis)
+height = (xyz - center) @ axis
+
+# --- 色 ---------------------------------------------------------------------
+def rgb(hexcode):
+    return np.array([int(hexcode[i:i + 2], 16) for i in (1, 3, 5)]) / 255
+PALETTE = {"CI": ("#a9c8ee", "#7ea9df"), "CII": ("#f6c7a8", "#eca07a"),
+           "ATP": "#f2c230", "phos": "#c2255c"}
+colors = np.zeros((len(records), 3)); group = np.zeros(len(records), int)
+for i, (k, c) in enumerate(zip(kind, chain_no)):
+    if k in ("CI", "CII"):
+        colors[i] = rgb(PALETTE[k][c % 2]); group[i] = 10 * c + (1 if k == "CI" else 2)   # サブユニットごとに濃淡
+    elif k == "phos":
+        colors[i] = rgb(PALETTE["phos"]); group[i] = 10 * c + 3
+    else:
+        colors[i] = rgb(PALETTE["ATP"]); group[i] = 100 + 10 * c + (1 if k == "ATP_CII" else 3)
+
+# --- 描画（原子を球として z バッファで重ね、陰影と輪郭線をつける） ----------------
+def view_matrix(view_dir, up):
+    """行が画面の x, y, z（z は見る人の方向）になる回転行列"""
+    z = view_dir / np.linalg.norm(view_dir)
+    y = up - np.dot(up, z) * z; y /= np.linalg.norm(y)
+    return np.vstack([np.cross(y, z), y, z])
+
+def render(mask, R, px=0.22, ss=3, fog=0.35, depth_jump=5.0, line=1):
+    p = (xyz[mask] - center) @ R.T
+    rad, col, grp = radius[mask], colors[mask], group[mask]
+    s = px / ss                                                 # 高解像度で描いて最後に縮小する
+    lo = p[:, :2].min(0) - rad.max() - 4; hi = p[:, :2].max(0) + rad.max() + 4
+    W, H = np.ceil((hi - lo) / s).astype(int)
+    depth = np.full((H, W), -np.inf); index = np.full((H, W), -1); nz = np.zeros((H, W))
+    gx, gy = (p[:, 0] - lo[0]) / s, (hi[1] - p[:, 1]) / s
+    for i in range(len(p)):
+        r = rad[i] / s
+        xs = np.arange(max(int(gx[i] - r), 0), min(int(gx[i] + r) + 2, W))
+        ys = np.arange(max(int(gy[i] - r), 0), min(int(gy[i] + r) + 2, H))
+        d2 = (xs[None, :] + 0.5 - gx[i]) ** 2 + (ys[:, None] + 0.5 - gy[i]) ** 2
+        cap = np.sqrt(np.clip(r * r - d2, 0, None))
+        zz = p[i, 2] + cap * s
+        win = (slice(ys[0], ys[-1] + 1), slice(xs[0], xs[-1] + 1))
+        upd = (d2 < r * r) & (zz > depth[win])
+        depth[win][upd] = zz[upd]; index[win][upd] = i; nz[win][upd] = (cap / r)[upd]
+    hit = index >= 0
+    img = np.ones((H, W, 3))
+    shade_ = col[index.clip(0)] * (0.72 + 0.28 * nz)[..., None]           # 球の丸みによる陰影
+    dmin, dmax = depth[hit].min(), depth[hit].max()
+    f = (fog * (dmax - depth) / (dmax - dmin)).clip(0, fog)[..., None]   # 奥ほど白っぽく
+    img[hit] = (shade_ * (1 - f) + f)[hit]
+    g = np.where(hit, grp[index.clip(0)], -1); d = np.where(hit, depth, dmin - 100)
+    edge = np.zeros((H, W), bool)
+    for sh in ((0, 1), (1, 0), (0, -1), (-1, 0)):                       # 部品の境目と奥行きの段差に線を引く
+        g2, d3 = np.roll(g, sh, axis=(0, 1)), np.roll(d, sh, axis=(0, 1))
+        edge |= hit & ((g2 != g) | (np.abs(d3 - d) > depth_jump)) & (d >= d3)
+    for _ in range(line):
+        edge |= np.roll(edge, 1, 0) | np.roll(edge, 1, 1)
+    img[edge & hit] = 0.15
+    img = img[:H // ss * ss, :W // ss * ss].reshape(H // ss, ss, W // ss, ss, 3).mean(axis=(1, 3))
+    return img.clip(0, 1), [lo[0], hi[0], lo[1], hi[1]]
+
+# (a) 横から：サブユニット A の方向から 30° 回した向き
+toA = xyz[chain_no == 0].mean(axis=0) - center; toA -= np.dot(toA, axis) * axis; toA /= np.linalg.norm(toA)
+side_dir = np.cos(np.pi / 6) * toA + np.sin(np.pi / 6) * np.cross(axis, toA)
+img_a, ext_a = render(np.ones(len(records), bool), view_matrix(side_dir, axis))
+# (b) CII 側から見下ろし、S431・T432 の高さより上を取り除く（CII 側の ATP は切らずに残す）
+cut = height[kind == "phos"].max() + 1.0
+img_b, ext_b = render((height <= cut) | (kind == "ATP_CII"), view_matrix(axis, toA), fog=0.45)
+
+fig, ax = plt.subplots(1, 2, figsize=(10.5, 5.4), gridspec_kw=dict(width_ratios=[1.15, 1]))
+ax[0].imshow(img_a, extent=ext_a); ax[1].imshow(img_b, extent=ext_b)
+for a in ax:
+    a.axis("off")
+ax[0].set_title("(a) 横から見た六量体", loc="left", fontsize=10.5)
+ax[1].set_title("(b) S431・T432 の高さで切った CII リング", loc="left", fontsize=10.5)
+x_br = ext_a[1] + 2
+for label, (y0, y1) in (("CII", (2, 50)), ("CI", (-50, -2))):
+    ax[0].plot([x_br, x_br + 3, x_br + 3, x_br], [y0, y0, y1, y1], color=INK2, lw=1)
+    ax[0].text(x_br + 5, (y0 + y1) / 2, label, va="center", fontsize=10.5)
+ax[0].plot([ext_a[0] + 4, ext_a[0] + 54], [ext_a[2] - 3] * 2, color="#0b0b0b", lw=2)
+ax[0].text(ext_a[0] + 29, ext_a[2] - 6, "5 nm", ha="center", va="top", fontsize=9)
+ax[0].set(xlim=(ext_a[0] - 2, ext_a[1] + 16), ylim=(ext_a[2] - 13, ext_a[3] + 2))
+fig.legend(handles=[Patch(color=rgb(PALETTE["CI"][0]), label="CI"), Patch(color=rgb(PALETTE["CII"][0]), label="CII"),
+                    Patch(color=rgb(PALETTE["ATP"]), label="ATP"), Patch(color=rgb(PALETTE["phos"]), label="S431・T432")],
+           loc="lower center", ncol=4, frameon=False, fontsize=9.5)
+fig.tight_layout(rect=(0, 0.06, 1, 1))
+plt.show()
+```
+
+@fig-kaic の (b) は、CII のリングをちょうど S431 と T432 の高さで輪切りにして、上から見たものです。リン酸化される2つの残基（赤紫）は、サブユニットの境目に面していて、隣のサブユニットに結合した ATP（黄色）のすぐそばにあります。この構造では、ATP の末端のリン原子と T432 の側鎖の酸素原子との距離は約 `{python} f"{d_atp_t432.mean():.1f}"` Å です。リン酸基は、サブユニットの境目をまたいで ATP から受け渡されると考えられています [@egli2013]。
+
+この一方向のサイクルを回しているのが、KaiA と KaiB です。KaiA は KaiC に結合して、その自己リン酸化を促進します。KaiA が働いているあいだ、KaiC は U 型から T 型、ST 型へとリン酸化されていきます。ところが S 型が増えてくると、KaiB が S 型の KaiC に結合し、その複合体が KaiA を捕まえて働けなくしてしまいます [@rust2007]。KaiA を失った KaiC は脱リン酸化の向きに進み、ST 型から S 型、U 型へと戻っていきます。やがて S 型が減ると、捕まっていた KaiA が解放されて、再びリン酸化が始まります。リン酸化が進んで S 型が溜まると、その S 型がリン酸化そのものを止める。この時間遅れを伴った負のフィードバックが、振動を生み出しているのです（@fig-cycle）。
+
+```{python}
+#| label: fig-cycle
+#| fig-cap: "KaiC のリン酸化サイクルと、KaiA・KaiB によるフィードバック。KaiA は U → T → ST のリン酸化を促進する。S 型の KaiC は KaiB とともに KaiA を捕まえ、リン酸化を止める。"
+#| fig-width: 7
+#| fig-height: 4.6
+#| code-fold: true
+#| code-summary: "図のコード"
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch
+
+fig, ax = plt.subplots()
+ax.set(xlim=(0, 11.6), ylim=(0, 7.2), aspect="equal")
+ax.axis("off")
+
+pos = {"U": (2.2, 1.4), "T": (2.2, 4.6), "ST": (6.2, 4.6), "S": (6.2, 1.4)}
+r = 0.62
+for name, (x, y) in pos.items():
+    ax.add_patch(Circle((x, y), r, facecolor="#f3f2ee", edgecolor=MUTED, lw=1.2, zorder=3))
+    ax.text(x, y, name, ha="center", va="center", fontsize=14, zorder=4)
+
+def arrow(p, q, color=INK2, style="-|>", ls="-", rad=0.0, lw=1.6, shrink=0.0):
+    a = FancyArrowPatch(p, q, arrowstyle=style, mutation_scale=16, color=color, lw=lw,
+                        linestyle=ls, connectionstyle=f"arc3,rad={rad}",
+                        shrinkA=shrink, shrinkB=shrink, zorder=2)
+    ax.add_patch(a)
+
+def edge(a, b):  # arrow between two circles, trimmed at the rims
+    (x1, y1), (x2, y2) = pos[a], pos[b]
+    d = np.hypot(x2 - x1, y2 - y1); ux, uy = (x2 - x1) / d, (y2 - y1) / d
+    arrow((x1 + ux * r, y1 + uy * r), (x2 - ux * r, y2 - uy * r))
+
+for a, b in [("U", "T"), ("T", "ST"), ("ST", "S"), ("S", "U")]:
+    edge(a, b)
+lab = dict(fontsize=10, color=INK2, ha="center", va="center")
+ax.text(1.05, 3.0, "T432\nリン酸化", **lab)
+ax.text(4.2, 4.15, "S431 リン酸化", **lab)
+ax.text(7.3, 3.0, "T432\n脱リン酸化", **lab)
+ax.text(4.2, 0.9, "S431 脱リン酸化", **lab)
+
+def box(x, y, text, fc, ec):
+    ax.add_patch(FancyBboxPatch((x - 0.65, y - 0.32), 1.3, 0.64, boxstyle="round,pad=0.05",
+                                facecolor=fc, edgecolor=ec, lw=1.2, zorder=3))
+    ax.text(x, y, text, ha="center", va="center", fontsize=12, zorder=4)
+
+box(4.2, 6.5, "KaiA", "#dbe8f8", BLUE)
+box(9.2, 1.4, "KaiB", "#fbe1d6", ORANGE)
+arrow((3.7, 6.2), (2.35, 3.15), color=BLUE)             # KaiA -> U→T
+arrow((4.2, 6.15), (4.2, 4.75), color=BLUE)             # KaiA -> T→ST
+ax.text(2.55, 5.75, "促進", fontsize=10, color=BLUE)
+arrow((6.85, 1.4), (8.5, 1.4), color=ORANGE, style="-", ls="--")    # S — KaiB
+ax.text(7.7, 1.65, "結合", fontsize=10, color=ORANGE, ha="center")
+ax.plot([9.2, 9.2, 4.95], [1.75, 6.5, 6.5], color=ORANGE, lw=1.6, ls="--", zorder=1)  # S・KaiB ⊣ KaiA
+ax.plot([4.95, 4.95], [6.22, 6.78], color=ORANGE, lw=2.2, zorder=1)                       # 抑制の記号
+ax.text(9.35, 4.3, "KaiB とともに\nKaiA を捕まえる", fontsize=10, color=ORANGE, ha="left", va="center")
+plt.show()
+```
+
+KaiC には、温度補償を考えるうえで欠かせない性質がもうひとつあります。KaiC は ATP を加水分解する酵素（ATPase）でもあるのですが、その速さが極端に遅いのです。KaiC のサブユニット1つが1日に分解する ATP は約15分子にすぎず、しかもこの活性はそれ自体が温度補償されています [@terauchi2007]。@fig-atpase の左は、25〜35 °C での ATPase 活性です。KaiC 単独での Q~10~ は約1.0、KaiA と KaiB を加えても約1.2で、Q~10~ = 2 の反応を表した破線とは明らかに違います。さらに、周期が異なるさまざまな変異体の KaiC で ATPase 活性を測ると、その活性は生体内でのリズムの周波数（周期の逆数）に比例していました（@fig-atpase の右）。ATPase が速い KaiC ほど、時計も速く進むのです。
+
+```{python}
+#| label: fig-atpase
+#| fig-cap: "KaiC の ATPase 活性。（左）温度依存性。（右）野生型と5種類の周期変異体での、ATPase 活性と生体内リズムの周波数の関係。括弧内は生体内での周期。Terauchi et al. (2007) の Fig. 4・Fig. 5 から読み取った値を再プロットした。"
+#| fig-width: 10
+#| fig-height: 3.8
+#| code-fold: true
+#| code-summary: "図のコード"
+T = [25, 30, 35]
+atp = {"KaiC 単独": [15.35, 15.92, 14.75],
+       "KaiC + KaiA + KaiB": [14.52, 16.67, 17.69],
+       "KaiC-AA": [28.12, 27.14, 28.84],
+       "KaiC-DE": [10.73, 10.71, 11.47]}
+mutants = {"WT": (25, 1.00), "T42S": (28, 0.90), "S157P": (21, 1.37),
+           "F470Y": (17, 1.55), "R393C": (15, 2.13), "A251V": (46, 0.30)}
+
+fig, ax = plt.subplots(1, 2)
+for (name, v), c in zip(atp.items(), [BLUE, ORANGE, AQUA, YELLOW]):
+    ax[0].plot(T, v, "o-", color=c, ms=7, label=f"{name}（Q10 ≈ {v[2] / v[0]:.2f}）")
+ax[0].plot(T, 15.35 * np.array([1, 2 ** 0.5, 2]), "--", color=MUTED, lw=1, label="Q10 = 2 なら")
+ax[0].set(xticks=T, ylim=(0, 46), xlabel="温度 (°C)", ylabel="ATP 分解速度（分子 / KaiC / 日）")
+ax[0].legend(fontsize=8.2, loc="upper center", ncol=2)
+
+freq = np.array([24 / p for p, _ in mutants.values()])
+act = np.array([a for _, a in mutants.values()])
+slope = (freq @ act) / (freq @ freq)
+x = np.linspace(0, 1.8, 10)
+ax[1].plot(x, slope * x, color=MUTED, lw=1)
+ax[1].plot(freq, act, "o", color="#0b0b0b", ms=7)
+for (name, (p, a)), f in zip(mutants.items(), freq):
+    ax[1].text(f + 0.03, a - 0.08, f"{name}（{p} h）", fontsize=8.5, color=INK2)
+ax[1].set(xlim=(0, 2), ylim=(0, 2.5), xlabel="生体内リズムの周波数（1/日）",
+          ylabel="ATPase 活性（野生型を1とした比）")
+fig.tight_layout()
+plt.show()
+```
+
+なぜこれほど遅く、しかも温度に鈍感なのでしょうか。CI ドメインの立体構造を詳しく調べた研究によると、遅さの原因は2つあります。加水分解に使われる水分子が反応しにくい位置に保持されていることと、ATP の加水分解が、活性化エネルギーの高いペプチド結合の異性化と結びついていることです [@abe2015]。同じ研究は、KaiC 単独に ATP を加えた直後（2時間以内）の ATPase 活性は温度に依存する（Q~10~ ≈ 1.4）のに対し、24時間以上たって定常状態に落ち着いた活性はほとんど温度に依存しない（Q~10~ ≈ 1.1）ことも報告しています。また、KaiC のたった1か所のアミノ酸を置き換えるだけで、周期を15時間から158時間まで変えられることもわかっています。しかも、これらの変異体の多くで、温度補償はほぼ保たれています [@itomiwa2020]。
+
+ATPase と周期の結びつきは、温度に対しても確かめられています。ATPase 活性の温度補償が崩れた KaiC の変異体を調べると、リン酸化リズムの周波数の温度補償も同じ向きに崩れていました [@furuike2022]。ATPase の Q~10~ が1.5〜1.7に上がった3つの変異体では、周波数の Q~10~ も1.2〜1.6に上がり、温度を上げると ATPase がかえって遅くなる変異体（Q~10~ ≈ 0.5）では、周波数も温度とともに下がりました（Q~10~ ≈ 0.7）。また、KaiA がないときに KaiB と KaiC の複合体がひとりでにほどける速さも、ゆっくりで、しかも温度補償されています（Q~10~ ≈ 1.05）[@simon2022]。時計の歯車の中には、それ自体が温度に鈍いものがいくつもあるのです。
+
+こうした事実を見ると、温度補償の秘密は KaiC というひとつの部品に集約されているように思えます。けれども、ATPase が温度補償されていることは、それだけでは時計全体の周期が補償される理由になりません。KaiC の中にも外にも温度に敏感な反応はたくさんあり、それらがネットワークとしてつながったときに周期がどう決まるのかを考える必要があります。そもそも、たくさんの反応からなるシステムで「周期が温度に依存しない」とは、数学的にはどういう条件なのでしょうか。次の章では、まずこの条件を数式で書き表します。
+
+## 温度補償を数式で書く {#sec-math}
+
+### 反応の温度依存性
+
+化学反応の速度定数 $k$ の温度依存性は、多くの場合、アレニウスの式でよく表されます。
+
+$$
+k(T) = A \exp\left(-\frac{E}{RT}\right)
+$$ {#eq-arrhenius}
+
+ここで $T$ は絶対温度、$R$ は気体定数、$E$ は活性化エネルギー、$A$ は温度にほとんど依存しない定数です。活性化エネルギーは、反応が進むために越えなければならないエネルギーの山の高さだと考えてください。山が高い反応ほど、温度を上げたときの加速が大きくなります。
+
+@eq-arrhenius から、温度が $T$ から $T + 10$ K に上がったときの速度の比、つまり反応の Q~10~ は
+
+$$
+\ln Q_{10} = \frac{E}{R}\left(\frac{1}{T} - \frac{1}{T+10}\right) \approx \frac{10\,E}{RT^{2}}
+$$ {#eq-q10}
+
+となります。たとえば活性化エネルギーが 50 kJ/mol の反応なら、25 °C から 35 °C に上げると、速度はおよそ1.9倍になります。@fig-q10 は、活性化エネルギーと Q~10~ の関係です。周期の Q~10~ が1に近いということは、時計が全体として、活性化エネルギーがほとんどゼロの反応のように振る舞っているということです。
+
+```{python}
+#| label: fig-q10
+#| fig-cap: "活性化エネルギーと Q~10~ の関係（25 °C → 35 °C）。黄色の帯は、概日リズムの周期でみられる典型的な Q~10~ の範囲。"
+#| fig-width: 6
+#| fig-height: 3.6
+R = 8.314e-3                  # 気体定数 (kJ / mol / K)
+T1, T2 = 298.15, 308.15       # 25 °C と 35 °C
+E = np.linspace(0, 120, 200)  # 活性化エネルギー (kJ / mol)
+Q10 = np.exp(E / R * (1 / T1 - 1 / T2))
+
+fig, ax = plt.subplots()
+ax.axhspan(0.8, 1.2, color=YELLOW, alpha=0.25, lw=0)
+ax.plot(E, Q10, color=BLUE)
+ax.plot(50, np.exp(50 / R * (1 / T1 - 1 / T2)), "o", color=ORANGE)
+ax.annotate("E = 50 kJ/mol で Q10 ≈ 1.9", (50, 1.92), (58, 1.45), color=INK2,
+            arrowprops=dict(arrowstyle="-", color=MUTED))
+ax.set(xlabel="活性化エネルギー E (kJ/mol)", ylabel="Q10", ylim=(0.8, 5))
+plt.show()
+```
+
+### 周期の制御係数
+
+時計の周期 $\tau$ は、ネットワークの中のたくさんの反応の速度定数 $k_1, k_2, \dots, k_n$ で決まります。そこで、それぞれの速度定数が周期にどれだけ効いているかを、次の量で表すことにします。
+
+$$
+C_i = \frac{\partial \ln \tau}{\partial \ln k_i}
+$$ {#eq-cc}
+
+$C_i$ は、反応 $i$ の速度定数を1%変えたときに周期が何%変わるかを表す数で、周期の制御係数と呼ばれます。代謝ネットワークで、どの酵素が反応の流れをどれだけ支配しているかを測るために作られた代謝制御解析の考え方を、周期に当てはめたものです [@ruoff2003]。$C_i$ が負なら、その反応を速めると周期が縮みます。ふつう想像するのはこちらでしょう。$C_i$ が正なら、その反応を速めると、かえって周期が延びます。
+
+制御係数には、簡単ですが重要な性質があります。すべての反応の速度定数を、いっせいに同じ倍率 $\lambda$ で速くしたとしましょう。これは、時計の動きを早送りで見ているのと同じことです。反応の順番も、各状態の濃度が変化する形も変わらず、時間の目盛りだけが $1/\lambda$ に縮みます。したがって、周期も $1/\lambda$ になります。
+
+$$
+\tau(\lambda k_1, \dots, \lambda k_n) = \frac{\tau(k_1, \dots, k_n)}{\lambda}
+$$
+
+両辺の対数をとって $\ln\lambda$ で微分し、$\lambda = 1$ とおくと、
+
+$$
+\sum_{i=1}^{n} C_i = -1
+$$ {#eq-sum}
+
+が得られます。これを総和則と呼びます。ここで「すべての反応」とは、単位に時間の逆数を含む速度定数のすべてのことです。結合の解離定数のように濃度の単位を持つパラメータや、タンパク質の濃度は、早送りしても変わらないので、この和には入りません。
+
+### 温度補償の条件
+
+これで準備が整いました。温度が変わると、それぞれの速度定数が @eq-arrhenius に従って変わり、その影響が制御係数を通して周期に伝わります。連鎖律を使い、$d\ln k_i/dT = E_i/RT^2$ を代入すると、
+
+$$
+\frac{d \ln \tau}{d T} = \sum_{i} \frac{\partial \ln \tau}{\partial \ln k_i}\,\frac{d \ln k_i}{d T} = \frac{1}{RT^{2}} \sum_{i} C_i E_i
+$$ {#eq-dlntau}
+
+となります。周期が温度に依存しないためには、右辺の和がゼロでなければなりません。
+
+$$
+\sum_{i} C_i E_i \approx 0
+$$ {#eq-tc}
+
+これが温度補償の条件です [@ruoff2003; @ruoff2005]。各反応が周期に与える影響を「制御係数 × 活性化エネルギー」として書き出し、その合計がゼロになるようにつり合わせる、帳簿のようなものだと考えるとわかりやすいでしょう。
+
+この帳簿と総和則 @eq-sum を合わせると、何が言えるでしょうか。もし、すべての反応の活性化エネルギーが同じ値 $E$ なら、$\sum_i C_i E_i = E\sum_i C_i = -E$ となり、周期は活性化エネルギー $E$ のひとつの反応と同じように、温度とともに縮みます。ネットワークがどれほど複雑でも、それだけでは温度補償は起きないのです。活性化エネルギーはふつう正なので、負の制御係数を持つ反応の寄与を打ち消すには、正の制御係数を持つ反応、つまり速めるとかえって周期が延びる反応が欠かせません。しかも、その反応の活性化エネルギーが十分に大きくなければなりません。多くの反応が温度に敏感な時計では、温度補償は、周期を縮める反応と周期を延ばす反応との、温度に対するつり合いとして実現されるのです。
+
+ただし、この結論には2つの前提があります。1つ目は、どの反応も温度とともに速くなる（活性化エネルギーが正）ことです。次の節の平衡定数の温度変化や、見かけの活性化エネルギーが負になる過程を認めれば、帳簿への正の寄与は別の形でも生まれます。2つ目は、活性化エネルギーがある程度大きいことです。どの反応の活性化エネルギーもほぼゼロなら、周期を延ばす反応がなくても、周期はそもそも温度で変わりません。7章の「すべて鈍い型」や、KaiC の ATPase がそれ自体で温度補償されているという見方は、こちらに近いものです。このつり合いの考え方は、バランス仮説として古くから提案されてきました [@ruoff1992]。最近では、周期を延ばす反応がどのような条件で現れるのかが、生化学的な振動子の一般論として調べられています [@fu2024]。
+
+### 平衡定数の寄与
+
+最後に、もうひとつ考えておくべき項があります。分子どうしの結合のように、速度定数ではなく平衡定数で表される過程です。平衡定数 $K$ の温度依存性は、ファント・ホッフの式
+
+$$
+\frac{d \ln K}{d T} = \frac{\Delta H}{R T^{2}}
+$$
+
+で与えられます（$\Delta H$ は反応のエンタルピー変化）。$K$ に対する周期の制御係数を $C_K$ とすると、@eq-dlntau には $C_K\,\Delta H$ という項が加わります。
+
+$$
+\frac{d \ln \tau}{d T} = \frac{1}{RT^{2}}\left(\sum_i C_i E_i + \sum_j C_{K_j} \Delta H_j\right)
+$$ {#eq-dlntau-full}
+
+活性化エネルギーと違って、$\Delta H$ は正にも負にもなりえます。したがって、結合の平衡が温度でずれることも、帳簿をつり合わせる手段になりえます。この記事で使うモデルでは、KaiA の効き方を表す結合の定数が、この形で入ってきます。
+
+@eq-tc は、温度補償のために何が必要かを教えてくれます。けれども、実際の KaiABC 時計でどの反応が周期を縮め、どの反応が周期を延ばしているのかは、式を眺めているだけではわかりません。それを知るには、時計のモデルを実際に動かしてみる必要があります。
+
+## KaiABC モデルを動かす {#sec-model}
+
+ここからは、KaiABC 時計の数理モデルを Python で動かしていきます。使うのは、Rust らが2007年に提案したモデルです [@rust2007]。彼らは、KaiA があるときとないときに KaiC の各リン酸化型がどれくらいの速さで移り変わるかを、部分反応ごとに測定しました。そうして決めた速度定数を組み合わせるだけで、試験管の中の振動がほぼ再現できることを示したのです。変数はたった3つですが、KaiABC 時計の本質をよくとらえています。ただし、このモデルには KaiC の ATPase の段階は明示的には入っていません。速度定数は、ATP の加水分解を含むさまざまな過程をまとめて表した、実効的なものです。この点は、後半で ATPase の役割を考えるときに効いてきます。
+
+### モデルの式
+
+モデルの変数は、T 型、ST 型、S 型の KaiC の濃度 $T$、$D$、$S$ です（ST 型を $D$ と書くのは、2か所がリン酸化された doubly phosphorylated の頭文字です）。U 型の濃度は、KaiC の総量から残りを引いて $U = [\mathrm{KaiC}] - T - D - S$ で求めます。4つの型のあいだの移り変わりは、すべて一次反応として書かれます。
+
+$$
+\begin{aligned}
+\frac{dT}{dt} &= k_{UT}\,U + k_{DT}\,D - (k_{TU} + k_{TD})\,T \\
+\frac{dD}{dt} &= k_{TD}\,T + k_{SD}\,S - (k_{DT} + k_{DS})\,D \\
+\frac{dS}{dt} &= k_{US}\,U + k_{DS}\,D - (k_{SU} + k_{SD})\,S
+\end{aligned}
+$$ {#eq-rust}
+
+$k_{XY}$ は、X 型から Y 型への移り変わりの速度定数です。@fig-cycle の4本の矢印に加えて、逆向きの移り変わり（たとえば T 型から U 型への脱リン酸化）も含まれています。
+
+フィードバックは、これらの速度定数が自由な KaiA の量によって変わることで入ります。2章で見たように、S 型の KaiC は KaiB とともに KaiA を捕まえます。原論文では、S 型の KaiC の単量体1つが KaiA の二量体1つ（単量体2つ）を捕まえると仮定して、自由な KaiA の濃度を次のように書いています。
+
+$$
+A = \max\{0,\ [\mathrm{KaiA}] - 2S\}
+$$ {#eq-freeA}
+
+KaiB は、式には明示的に出てきません。KaiB は十分に多く、S 型の KaiC とすぐに結合すると仮定して、その働きを @eq-freeA にまとめているのです。そして各速度定数は、自由な KaiA の量に双曲線的に依存します。
+
+$$
+k_{XY} = k^{0}_{XY} + k^{A}_{XY}\,\frac{A}{K_{1/2} + A}
+$$ {#eq-kxy}
+
+$k^0_{XY}$ は KaiA がないときの速度、$k^A_{XY}$ は KaiA が最大限に効いたときの変化分、$K_{1/2}$ は KaiA の効果が半分になる濃度です。
+
+この記事では、@eq-kxy を少しだけ書き直して使います。$f = A/(K_{1/2} + A)$ は、KaiC のうち KaiA が結合している割合と読めるので、
+
+$$
+k_{XY} = (1 - f)\,k^{\mathrm{free}}_{XY} + f\,k^{\mathrm{bound}}_{XY},
+\qquad k^{\mathrm{free}}_{XY} = k^{0}_{XY},\quad k^{\mathrm{bound}}_{XY} = k^{0}_{XY} + k^{A}_{XY}
+$$ {#eq-kxy2}
+
+と書けます。KaiA が結合していない KaiC の速度と、結合している KaiC の速度を、それぞれの割合で平均したものです。こう書いておくと、それぞれの速度定数が「ある状態の KaiC がどれだけの速さで変化するか」を表すことになり、次の章でアレニウスの式を当てはめやすくなります。
+
+原論文の補足資料にある速度定数を、この形に直したものが @tbl-params です。KaiA が結合した状態での ST → S と S → U の速度は、計算するとわずかに負の値になります。この記事の条件（KaiA 1.3 µM）では、KaiA が結合している割合は最大でも約75%なので、元のモデルのままでも、反応全体の速度が負になることはありません。けれども、次の章からは速度定数のひとつひとつにアレニウスの式を当てはめるので、負の速度定数は扱えません。そこで、この2つは0にしました。この置き換えで、30 °C での周期は約20.7時間から約21.4時間に変わります^[原論文でも、反応全体の速度が負になってしまう場合には、その速度を0に置き換えています。ただしそれが必要だったのは、KaiA の濃度を高くした一部の計算だけです。]。
+
+| 移り変わり | KaiA なし $k^{\mathrm{free}}$ (h^−1^) | KaiA あり $k^{\mathrm{bound}}$ (h^−1^) |
+|:--|--:|--:|
+| U → T | 0 | 0.479 |
+| T → ST | 0 | 0.213 |
+| S → ST | 0 | 0.506 |
+| U → S | 0 | 0.053 |
+| T → U | 0.21 | 0.290 |
+| ST → T | 0 | 0.173 |
+| ST → S | 0.31 | 0（元の値は −0.009） |
+| S → U | 0.11 | 0（元の値は −0.023） |
+
+: Rust らのモデルの速度定数。原論文の補足資料（Table S2）の値から @eq-kxy2 の形に直した。$K_{1/2}$ = 0.43 µM、KaiA = 1.3 µM、KaiC = 3.4 µM。 {#tbl-params}
+
+この表を見ると、モデルの性格がよくわかります。リン酸化の向きの移り変わり（U → T、T → ST、S → ST、U → S）は、KaiA が結合しているときにしか起きません。逆に、ST → S と S → U の脱リン酸化は、KaiA が結合していないときにしか起きません。KaiA が自由に働けるかどうかで、系全体がリン酸化の相と脱リン酸化の相のあいだで切り替わるのです。
+
+これをコードにします。たくさんのパラメータを一度に計算できるように、パラメータを配列で受け取れる形にしてあります。
+
+```{python}
+#| label: model
+R_GAS = 8.314e-3                     # 気体定数 (kJ / mol / K)
+KAIA, KAIC, KHALF = 1.3, 3.4, 0.43   # 濃度 (µM)
+
+# 0 でない9つの速度定数 (1/h)。_b は KaiA 結合時、_f は KaiA 非結合時
+RATES0 = {"UT_b": 0.479077, "TD_b": 0.212923, "SD_b": 0.505692, "US_b": 0.0532308,
+          "TU_b": 0.21 + 0.0798462, "DT_b": 0.173,
+          "TU_f": 0.21, "DS_f": 0.31, "SU_f": 0.11}
+RATE_NAMES = list(RATES0)
+LABELS = {"UT_b": "U→T (KaiA)", "TD_b": "T→ST (KaiA)", "SD_b": "S→ST (KaiA)",
+          "US_b": "U→S (KaiA)", "TU_b": "T→U (KaiA)", "DT_b": "ST→T (KaiA)",
+          "TU_f": "T→U (KaiAなし)", "DS_f": "ST→S (KaiAなし)", "SU_f": "S→U (KaiAなし)"}
+
+def base_params():
+    return {**RATES0, "KHALF": KHALF, "KAIA": KAIA, "KAIC": KAIC}
+
+def rhs(x, P):
+    """式 (eq-rust) の右辺。x は (3, N) の配列で、N 組のパラメータを同時に計算する"""
+    T, D, S = x
+    U = P["KAIC"] - T - D - S
+    A = np.maximum(0.0, P["KAIA"] - 2.0 * S)          # 自由な KaiA
+    f = A / (P["KHALF"] + A)                          # KaiA が結合している割合
+    g = 1.0 - f
+    kUT, kTD, kSD, kUS = f * P["UT_b"], f * P["TD_b"], f * P["SD_b"], f * P["US_b"]
+    kTU = f * P["TU_b"] + g * P["TU_f"]
+    kDT = f * P["DT_b"]
+    kDS, kSU = g * P["DS_f"], g * P["SU_f"]
+    dT = kUT * U + kDT * D - (kTU + kTD) * T
+    dD = kTD * T + kSD * S - (kDT + kDS) * D
+    dS = kUS * U + kDS * D - (kSU + kSD) * S
+    return np.array([dT, dD, dS])
+```
+
+微分方程式は4次のルンゲ＝クッタ法で解きます。原論文と同じく、初期値は T 型 0.68 µM、ST 型 1.36 µM、S 型 0.34 µM としました。周期は、十分に時間がたって振動が落ち着いたあと、リン酸化された KaiC の合計 $T + D + S$ がその平均値を下から上へ横切る時刻を線形補間で求め、その間隔の平均として測ります。
+
+```{python}
+#| label: integrator
+#| code-fold: true
+#| code-summary: "数値積分と周期の測定のコード"
+X0 = np.array([0.68, 1.36, 0.34])
+
+def stack(params_list):
+    """パラメータの辞書のリストを、値が配列の辞書にまとめる"""
+    return {k: np.array([p[k] for p in params_list], float) for k in params_list[0]}
+
+def integrate(P, t_end, dt=0.01, x0=None, record_every=10, forcing=None):
+    """N 組のパラメータを同時に RK4 で積分する。forcing(t) は時刻 t のパラメータを返す関数"""
+    N = np.size(P["KAIC"])
+    x = np.tile(X0.reshape(3, 1), (1, N)) if x0 is None else np.array(x0, float).reshape(3, -1)
+    ts, ys = [], []
+    for i in range(int(round(t_end / dt))):
+        t = i * dt
+        if i % record_every == 0:
+            ts.append(t); ys.append(x.copy())
+        P1, P2, P3 = (forcing(t), forcing(t + dt / 2), forcing(t + dt)) if forcing else (P, P, P)
+        k1 = rhs(x, P1); k2 = rhs(x + 0.5 * dt * k1, P2)
+        k3 = rhs(x + 0.5 * dt * k2, P2); k4 = rhs(x + dt * k3, P3)
+        x = x + dt / 6.0 * (k1 + 2 * k2 + 2 * k3 + k4)
+    return np.array(ts), np.array(ys)          # ys の形は (時刻, 3, N)
+
+def crossing_times(t, P):
+    """P が平均値を下から上へ横切る時刻（線形補間）"""
+    c = P - P.mean()
+    i = np.where((c[:-1] < 0) & (c[1:] >= 0))[0]
+    return t[i] - c[i] * (t[i + 1] - t[i]) / (c[i + 1] - c[i])
+
+def period_amp_from(t, y, t_skip):
+    """各パラメータ組の周期と振幅（T+D+S の山と谷の差）。振動しなければ周期は NaN、振幅は 0"""
+    m = t >= t_skip
+    Ptot = y[m].sum(axis=1)
+    half = len(Ptot) // 2
+    per = np.full(Ptot.shape[1], np.nan)
+    amp = np.zeros(Ptot.shape[1])
+    for j in range(Ptot.shape[1]):
+        a1, a2 = np.ptp(Ptot[:half, j]), np.ptp(Ptot[half:, j])
+        if a2 < 1e-3 or a2 < 0.95 * a1:                   # 振動していない、または減衰しつつある
+            continue
+        d = np.diff(crossing_times(t[m], Ptot[:, j]))
+        if len(d) >= 2 and d.std() / d.mean() < 0.02:   # 規則正しい振動だけを数える
+            per[j] = d.mean()
+            amp[j] = np.ptp(Ptot[:, j])
+    return per, amp
+
+def period_amp(params_list, t_end=900.0, t_skip=500.0, dt=0.01):
+    t, y = integrate(stack(params_list), t_end, dt)
+    return period_amp_from(t, y, t_skip)
+```
+
+```{python}
+#| label: run-30C
+p0 = base_params()
+tau0 = period_amp([p0])[0][0]
+t, y = integrate(stack([p0]), 300, dt=0.01, record_every=5)
+```
+
+30 °C の速度定数で計算すると、周期は `{python} f"{tau0:.1f}"` 時間になりました。Nakajima らが 30 °C で測った周期（約21時間）とよく合っています [@nakajima2005]。@fig-timeseries に、リン酸化型の時間変化と、自由な KaiA の量を示しました。T 型、ST 型、S 型の順に山が来ていて、2章で見た U → T → ST → S → U の順番が再現されています。自由な KaiA の量に注目してください。S 型が増えてくると、自由な KaiA はあるところで急にゼロになり、しばらくゼロのまま留まります。この期間が脱リン酸化の相で、S 型が減って KaiA が解放されると、再びリン酸化の相が始まります。
+
+```{python}
+#| label: fig-timeseries
+#| fig-cap: "30 °C での KaiC のリン酸化型の時間変化（上）と、自由な KaiA の濃度（下）。振動が落ち着いたあとの3周期分を示した。"
+#| fig-width: 7
+#| fig-height: 5
+#| code-fold: true
+#| code-summary: "図のコード"
+m = (t >= 200) & (t <= 272)
+tt, Y = t[m] - 200, y[m][:, :, 0]
+T_, D_, S_ = Y.T
+U_ = KAIC - T_ - D_ - S_
+fig, ax = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=[2.2, 1]))
+for arr, lab, c in [(U_, "U", MUTED), (T_, "T", BLUE), (D_, "ST", ORANGE), (S_, "S", AQUA)]:
+    ax[0].plot(tt, arr / KAIC, color=c, label=lab)
+ax[0].set_ylabel("KaiC に占める割合")
+ax[0].legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, 1.15))
+ax[1].plot(tt, np.maximum(0, KAIA - 2 * S_), color=INK2)
+ax[1].set(xlabel="時間 (h)", ylabel="自由な KaiA (µM)")
+fig.tight_layout()
+plt.show()
+```
+
+この振動は、初期値をどこから始めても同じ形に落ち着きます。@fig-phase は、S 型の濃度とリン酸化された KaiC の合計を2つの軸にとって、離れた2つの初期値から始めた軌道を描いたものです。どちらの軌道も、やがて同じ閉じた輪の上を回るようになります。このような、周りの軌道を引き寄せる孤立した周期軌道を、リミットサイクルと呼びます。概日時計がリミットサイクルとして振る舞うことは、8章で、振動が止まる仕組みや、温度の周期に同調する仕組みを考えるときの土台になります。
+
+```{python}
+#| label: fig-phase
+#| fig-cap: "2つの初期値（丸印）から始めた軌道。どちらも同じリミットサイクルに引き込まれる。破線は S 型が KaiA をすべて捕まえる境界（S = [KaiA]/2）。"
+#| fig-width: 5.4
+#| fig-height: 4.6
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots()
+for x0, c in [((0.05, 0.05, 0.05), BLUE), ((0.3, 2.2, 0.8), ORANGE)]:
+    t2, y2 = integrate(stack([p0]), 250, dt=0.01, x0=np.array(x0), record_every=5)
+    yy = y2[:, :, 0]
+    ax.plot(yy[:, 2], yy.sum(axis=1), color=c, lw=1.2)
+    ax.plot(yy[0, 2], yy[0].sum(), "o", color=c, ms=7)
+ax.axvline(KAIA / 2, color=MUTED, ls="--", lw=1)
+ax.set(xlabel="S 型 KaiC (µM)", ylabel="リン酸化 KaiC の合計 T+ST+S (µM)")
+plt.show()
+```
+
+@fig-phase の破線は、S 型が KaiA をすべて捕まえてしまう境界です。リミットサイクルはこの境界をまたいで回っていて、境界を越えた瞬間に脱リン酸化の相へ切り替わります。原論文の補足資料では、振動が起きるためには $K_{1/2}$ が十分に小さく（0.092〜0.93 µM の範囲）、KaiA の量の変化に対して速度がスイッチのように鋭く切り替わる必要があることも示されています [@rust2007]。協同的な結合を仮定しなくても、KaiA を捕まえる仕組みそのものが強い非線形性を生んでいるのです。
+
+これで、30 °C で動く時計が手に入りました。次は、この時計の温度を変えてみます。
+
+## 温度を入れてみる {#sec-naive}
+
+モデルに温度を入れるには、@tbl-params の9つの速度定数のそれぞれに、アレニウスの式 @eq-arrhenius で温度依存性を与えます。基準温度 $T_0$ を 30 °C とし、30 °C では @tbl-params の値になるように書くと、
+
+$$
+k_i(T) = k_i(T_0)\,\exp\left[-\frac{E_i}{R}\left(\frac{1}{T} - \frac{1}{T_0}\right)\right]
+$$ {#eq-arrhenius-ref}
+
+となります。$K_{1/2}$ は平衡定数なので、温度依存性を入れるときはファント・ホッフの式を使います。こちらも基準温度からのずれとして、同じ形で書けます。
+
+```{python}
+#| label: at-temperature
+T_REF = 30.0   # 基準温度 (°C)
+
+def at_temperature(p, temp_c, E, H=0.0):
+    """温度 temp_c (°C) でのパラメータ。E は速度定数ごとの活性化エネルギー (kJ/mol) の辞書、
+    H は K_1/2 のエンタルピー変化 (kJ/mol)"""
+    T, T0 = temp_c + 273.15, T_REF + 273.15
+    factor = lambda e: np.exp(-(e / R_GAS) * (1.0 / T - 1.0 / T0))
+    q = dict(p)
+    for n in RATE_NAMES:
+        q[n] = p[n] * factor(E[n])
+    q["KHALF"] = p["KHALF"] * factor(H)
+    return q
+```
+
+まずは素朴に、9つの反応の活性化エネルギーをすべて 50 kJ/mol にそろえてみます。
+
+```{python}
+#| label: naive-sweep
+E_equal = {n: 50.0 for n in RATE_NAMES}
+temps = np.arange(15.0, 40.01, 2.5)
+per_eq, amp_eq = period_amp([at_temperature(p0, T, E_equal) for T in temps], t_end=1500, t_skip=900)
+tau_at = lambda T: per_eq[np.argmin(abs(temps - T))]
+q10_naive = tau_at(25) / tau_at(35)
+q10_arrhenius = np.exp(50 / R_GAS * (1 / 298.15 - 1 / 308.15))
+```
+
+結果は @fig-naive のとおりです。周期は温度とともに一方的に縮み、25 °C から 35 °C での Q~10~ は `{python} f"{q10_naive:.3f}"` でした。これは、活性化エネルギー 50 kJ/mol のひとつの反応の Q~10~（`{python} f"{q10_arrhenius:.3f}"`）とぴったり一致します。3章の総和則が予言したとおりです。すべての速度定数が同じ割合で速くなるのは、時計を早送りしているのと同じなので、周期は速度定数と同じ割合で縮むしかありません。右の図のように、周期の逆数の対数を絶対温度の逆数に対してプロットすると（アレニウスプロット）、傾きから活性化エネルギー 50 kJ/mol がそのまま読み取れます。左の図の四角は、Nakajima らが試験管内で測った周期です [@nakajima2005]。実際の時計の周期は、温度を上げてもわずかに縮むだけです。
+
+```{python}
+#| label: fig-naive
+#| fig-cap: "すべての反応の活性化エネルギーを 50 kJ/mol にしたときの周期。（左）周期と温度。四角は Nakajima et al. (2005) の測定値。（右）周期の逆数のアレニウスプロット。"
+#| fig-width: 10
+#| fig-height: 3.8
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots(1, 2)
+ax[0].plot(temps, per_eq, "o-", color=ORANGE, ms=5, label="モデル（すべて 50 kJ/mol）")
+ax[0].plot([25, 30, 35], [22, 21, 20], "s", color="#0b0b0b", ms=7, label="試験管内の測定値")
+ax[0].set(xlabel="温度 (°C)", ylabel="周期 (h)")
+ax[0].legend()
+x = 1000 / (temps + 273.15)
+yv = np.log(1 / per_eq)
+slope, icpt = np.polyfit(x, yv, 1)
+ax[1].plot(x, yv, "o", color=ORANGE, ms=5)
+ax[1].plot(x, slope * x + icpt, color=INK2, lw=1)
+ax[1].set(xlabel="1000 / T (1/K)", ylabel="ln(1 / 周期)")
+ax[1].text(0.05, 0.08, f"傾きから求めた E = {-slope * R_GAS * 1000:.1f} kJ/mol",
+           transform=ax[1].transAxes, color=INK2)
+fig.tight_layout()
+plt.show()
+```
+
+これは、時計として失格です。けれども、この「失敗」は大事なことを教えてくれます。温度補償が起きるとしたら、それは反応ごとに活性化エネルギーが違うからであり、しかもその違い方が帳簿 @eq-tc をつり合わせるようになっているからです。では、つり合わせる余地はどこにあるのでしょうか。それを知るには、各反応の制御係数を調べる必要があります。
+
+## 感度解析で補償の内訳を読み解く {#sec-sensitivity}
+
+### 制御係数を数値で求める
+
+制御係数 @eq-cc は、数値計算で簡単に求められます。速度定数をひとつずつ、わずかに（ここでは対数で ±1%）増やしたり減らしたりして周期を測り、その差から微分を見積もります（中心差分）。
+
+```{python}
+#| label: control-coeffs
+def control_coeffs(p, names, h=0.01):
+    """各パラメータについて C = d ln(周期) / d ln(パラメータ) を中心差分で求める"""
+    plist = []
+    for n in names:
+        for s in (+1, -1):
+            q = dict(p)
+            q[n] = p[n] * np.exp(s * h)
+            plist.append(q)
+    per, _ = period_amp(plist)
+    return {n: (np.log(per[2 * i]) - np.log(per[2 * i + 1])) / (2 * h) for i, n in enumerate(names)}
+
+C_all = control_coeffs(p0, RATE_NAMES + ["KHALF", "KAIA", "KAIC"])
+C = {n: C_all[n] for n in RATE_NAMES}
+Cv = np.array([C[n] for n in RATE_NAMES])
+C_sum = Cv.sum()
+```
+
+結果を @fig-cc に示します。まず、9つの速度定数の制御係数を足し合わせると `{python} f"{C_sum:.3f}"` になりました。総和則 @eq-sum は、数値計算でもきちんと成り立っています。一方、平衡定数の $K_{1/2}$ や KaiA・KaiC の濃度の制御係数（それぞれ `{python} f"{C_all['KHALF']:+.2f}"`、`{python} f"{C_all['KAIA']:+.2f}"`、`{python} f"{C_all['KAIC']:+.2f}"`）は速度定数ではないので、この和には入りません。
+
+```{python}
+#| label: fig-cc
+#| fig-cap: "30 °C での各反応の制御係数。正（オレンジ）は速めると周期が延びる反応、負（青）は速めると周期が縮む反応。"
+#| fig-width: 6.6
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "図のコード"
+order = np.argsort(Cv)
+fig, ax = plt.subplots()
+ax.barh([LABELS[RATE_NAMES[i]] for i in order], Cv[order],
+        color=[ORANGE if c > 0 else BLUE for c in Cv[order]], height=0.62)
+ax.axvline(0, color=INK2, lw=0.8)
+for j, i in enumerate(order):
+    ax.text(Cv[i] + (0.04 if Cv[i] >= 0 else -0.04), j, f"{Cv[i]:+.2f}", va="center",
+            ha="left" if Cv[i] >= 0 else "right", fontsize=9, color=INK2)
+ax.set(xlabel="制御係数 C", xlim=(-1.6, 1.4))
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+ほとんどの反応は、ふつうの直感どおり負の制御係数を持っています。いちばん強く周期を縮めるのは、KaiA がないときの ST → S の脱リン酸化（`{python} f"{C['DS_f']:+.2f}"`）です。ところが、はっきりと正の制御係数を持つ反応が2つあります。KaiA による S → ST のリン酸化（`{python} f"{C['SD_b']:+.2f}"`）と、ST → T の脱リン酸化（`{python} f"{C['DT_b']:+.2f}"`）です（T → U の2つの反応も正ですが、`{python} f"{max(C['TU_b'], C['TU_f']):+.2f}"` 以下とごくわずかです）。特に S → ST は、速めると、ほぼ同じ割合で周期が延びます。3章で、温度補償には「速めるとかえって周期が延びる反応」が欠かせないと述べました。このモデルでは、S → ST がその役を担える反応です。
+
+### なぜ S → ST は周期を延ばすのか
+
+S → ST は、S 型の KaiC を ST 型に押し戻す反応です。2章で見たとおり、S 型は KaiB とともに KaiA を捕まえて、リン酸化を止める役目を持っています。S → ST が速いと、S 型が溜まりにくくなり、KaiA が捕まるまでの時間が延びます。そのあいだにリン酸化はさらに進み、より多くの KaiC がリン酸化されます。すると、そのあと脱リン酸化の相でそれを元に戻すのにも、時間がかかるようになります。つまり、リン酸化の相と脱リン酸化の相の両方が長くなるのです。
+
+```{python}
+#| label: sd-mechanism
+phase_rows = []
+for factor in (0.8, 1.0, 1.25):
+    q = dict(p0)
+    q["SD_b"] = p0["SD_b"] * factor
+    ts_, ys_ = integrate(stack([q]), 900, dt=0.01, record_every=1)
+    keep = ts_ >= 500
+    S_ = ys_[keep][:, 2, 0]
+    per_ = period_amp_from(ts_, ys_, 500)[0][0]
+    frac_free = np.mean(KAIA - 2 * S_ > 0)            # KaiA が自由な時間の割合
+    phase_rows.append((factor, per_, frac_free * per_, (1 - frac_free) * per_))
+```
+
+```{python}
+#| label: fig-sd
+#| fig-cap: "S → ST の速度を変えたときの、1周期のうち KaiA が自由な時間（リン酸化の相）と、捕まっている時間（脱リン酸化の相）。"
+#| fig-width: 7
+#| fig-height: 2.6
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots()
+for k, (fac, per_, free_, capt_) in enumerate(phase_rows):
+    ax.barh(k, free_, color=BLUE, height=0.55, label="KaiA が自由" if k == 0 else None)
+    ax.barh(k, capt_, left=free_, color=ORANGE, height=0.55, label="KaiA が捕まっている" if k == 0 else None)
+    ax.text(per_ + 0.3, k, f"周期 {per_:.1f} h", va="center", fontsize=9, color=INK2)
+ax.set_yticks(range(len(phase_rows)), [f"S→ST × {fac}" for fac, *_ in phase_rows])
+ax.set(xlabel="時間 (h)", xlim=(0, 33))
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.16), ncol=2, fontsize=9)
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+@fig-sd がそれを示しています。S → ST の速度を1.25倍にすると、KaiA が自由な時間は `{python} f"{phase_rows[1][2]:.1f}"` 時間から `{python} f"{phase_rows[2][2]:.1f}"` 時間に、捕まっている時間も `{python} f"{phase_rows[1][3]:.1f}"` 時間から `{python} f"{phase_rows[2][3]:.1f}"` 時間に延びています。反応を速めたのに時計が遅くなるという一見逆説的な振る舞いは、振動の「振れ幅」が大きくなることで生まれているのです。Fu らは、さまざまな振動子のモデルを調べて、このような周期を延ばす反応が、振動が始まる点から十分に離れた非線形性の強い領域で一般に現れること、そしてそうした反応は振動の振れ幅を大きくすることで周期を延ばしていることを示しています [@fu2024]。今回の結果は、彼らとは別の KaiABC モデルで、同じ仕組みを確かめたことになります。
+
+### 活性化エネルギーをランダムに振る
+
+制御係数がわかったので、帳簿 @eq-tc をつり合わせることが、どれくらい難しいのかを調べてみます。9つの反応の活性化エネルギーを、20〜100 kJ/mol の範囲からランダムに選んだ組を2000組つくり、それぞれについて 25 °C と 35 °C の周期から Q~10~ を求めます。
+
+```{python}
+#| label: random-sampling
+rng = np.random.default_rng(1)
+Es = rng.uniform(20, 100, size=(2000, len(RATE_NAMES)))
+per25, _ = period_amp([at_temperature(p0, 25.0, dict(zip(RATE_NAMES, e))) for e in Es], t_end=1000, t_skip=600)
+per35, _ = period_amp([at_temperature(p0, 35.0, dict(zip(RATE_NAMES, e))) for e in Es], t_end=1000, t_skip=600)
+Q10s = per25 / per35
+Q10_pred = np.exp(-(Es @ Cv) / R_GAS * (1 / 298.15 - 1 / 308.15))   # 帳簿からの予測
+osc = np.isfinite(Q10s)
+comp = osc & (Q10s > 0.9) & (Q10s < 1.1)
+frac_comp = comp.sum() / osc.sum()
+r_pred = np.corrcoef(np.log(Q10s[osc]), np.log(Q10_pred[osc]))[0, 1]
+```
+
+結果を @fig-random に示します。両方の温度で振動した `{python} f"{osc.sum()}"` 組のうち、Q~10~ が 0.9〜1.1 に収まったのは `{python} f"{frac_comp * 100:.1f}"`% だけでした。Q~10~ の中央値は `{python} f"{np.median(Q10s[osc]):.2f}"` で、多くの組はふつうの化学反応と同じように温度で速くなります。右の図は、シミュレーションで求めた Q~10~ と、30 °C での制御係数と @eq-dlntau から予測した Q~10~ を比べたものです。両者の対数の相関係数は `{python} f"{r_pred:.3f}"` で、3章の帳簿の式は、この非線形なモデルの温度依存性を驚くほどよく予測しています。
+
+```{python}
+#| label: fig-random
+#| fig-cap: "活性化エネルギーをランダムに選んだ2000組の結果。（左）周期の Q~10~ の分布。黄色の帯は 0.9〜1.1。（右）帳簿の式による予測とシミュレーションの比較。"
+#| fig-width: 10
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots(1, 2)
+bins = np.logspace(np.log10(0.3), np.log10(12), 50)
+ax[0].hist(Q10s[osc], bins=bins, color=BLUE, edgecolor="white", linewidth=0.6)
+ax[0].axvspan(0.9, 1.1, color=YELLOW, alpha=0.3, lw=0)
+ax[0].set(xscale="log", xlabel="周期の Q10（25 °C → 35 °C）", ylabel="組の数")
+ax[1].loglog(Q10_pred[osc], Q10s[osc], ".", color=BLUE, ms=3, alpha=0.5)
+ax[1].plot([0.2, 15], [0.2, 15], color=INK2, lw=1)
+ax[1].set(xlim=(0.2, 15), ylim=(0.2, 15), xlabel="帳簿の式から予測した Q10", ylabel="シミュレーションの Q10")
+fig.tight_layout()
+plt.show()
+```
+
+では、補償された組には、どんな特徴があるのでしょうか。@fig-features は、すべての組と補償された組とで、反応ごとの活性化エネルギーの平均を比べたものです。補償された組では、周期を延ばす S → ST の活性化エネルギーが高く、周期を最も強く縮める ST → S（KaiA なし）の活性化エネルギーが低くなっています。帳簿の言葉でいえば、正の項を大きくすることと、最も大きな負の項を小さくすることの両方が使われているのです。
+
+```{python}
+#| label: fig-features
+#| fig-cap: "反応ごとの活性化エネルギーの平均。灰色はすべての組、オレンジは補償された組（Q~10~ が 0.9〜1.1）。反応は制御係数の小さい順に並べた。"
+#| fig-width: 7
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "図のコード"
+oo = np.argsort(Cv)
+yy = np.arange(len(RATE_NAMES))
+fig, ax = plt.subplots()
+for j, i in enumerate(oo):
+    ax.plot([Es[osc, i].mean(), Es[comp, i].mean()], [j, j], color=GRID, lw=3, zorder=1)
+ax.plot(Es[osc][:, oo].mean(axis=0), yy, "o", color=MUTED, ms=8, label="すべての組", zorder=2)
+ax.plot(Es[comp][:, oo].mean(axis=0), yy, "o", color=ORANGE, ms=8,
+        label=f"補償された組（{comp.sum()} 組）", zorder=3)
+ax.set_yticks(yy, [f"{LABELS[RATE_NAMES[i]]}  C = {Cv[i]:+.2f}" for i in oo])
+ax.set(xlabel="活性化エネルギーの平均 (kJ/mol)")
+ax.legend(loc="lower right", fontsize=9)
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+ランダムに選んだ活性化エネルギーで温度補償が起きることは、めったにありません。補償された時計をつくるには、活性化エネルギーのあいだに、特定の関係が必要なのです。では、その関係はどのように作られているのでしょうか。そしてそれは、広い温度範囲で、変異にも強い時計になっているのでしょうか。
+
+## 周期の帳簿のつり合わせ方 {#sec-strategies}
+
+帳簿 @eq-tc をつり合わせるやり方は、ひとつではありません。ここではまず、性格が正反対の2つのやり方を比べてみます。どちらも、ひとつの考え方をもっとも単純な形にした、極端な作り方です。ですから、比べた結果の多くは作り方そのものから決まります。それでも両極から始めるのは、つり合わせ方によって時計の性格がどれほど変わるかが見やすいからです。2つのあいだにある型は、9章で考えます。
+
+1つ目は、どの反応の活性化エネルギーも小さくしてしまうやり方です。各項 $C_i E_i$ がもともと小さいので、帳簿は大きく傾きません。2章で見たように、KaiC の ATPase や、KaiB と KaiC の複合体がほどける過程は、それ自体が温度補償されています [@terauchi2007; @simon2022]。時計の歯車がどれも温度に鈍ければ、時計全体も温度に鈍くなる、という考え方です。ここでは、S → ST 以外の活性化エネルギーをすべて 10 kJ/mol（反応速度の Q~10~ にして約1.1）にした時計を「すべて鈍い型」と呼びます。ただし、これはこの考え方をもっとも単純な形にしたもので、「ATPase が周期を決めている」という仮説そのものではありません。その仮説が主張しているのは、周期を決める反応が温度補償されていることで、すべての反応が温度に鈍いことまでは求めていないからです。この違いは、9章で大事になります。
+
+2つ目は、どの反応も典型的な大きさ（50 kJ/mol、Q~10~ にして約1.9）の活性化エネルギーを持ち、周期を延ばす S → ST の活性化エネルギーを特に大きくして、負の項と正の項を打ち消し合わせるやり方です。温度に対して逆向きに働く反応どうしのつり合いで温度補償が生まれる、という考えは Hastings と Sweeney にさかのぼり [@hastings1957]、Ruoff がそれを一般の反応モデルに広げました [@ruoff1992]。そのバランス仮説をそのまま形にしたもので、「打ち消し合い型」と呼びます。
+
+どちらの型でも、S → ST の活性化エネルギーは、30 °C での帳簿 $\sum_i C_i E_i$ がちょうどゼロになるように決めます。
+
+```{python}
+#| label: strategies
+def balance_E(E_base, E_sensor=None):
+    """S→ST 以外の活性化エネルギーを E_base にそろえる（E_sensor を与えたときは U→T だけをその値にする）。
+    S→ST は、30 °C の周期の帳簿がゼロになるように決める"""
+    E = {n: E_base for n in RATE_NAMES}
+    if E_sensor is not None:
+        E["UT_b"] = E_sensor
+    E["SD_b"] = -sum(C[n] * E[n] for n in RATE_NAMES if n != "SD_b") / C["SD_b"]
+    return E
+
+STRATEGIES = {"A": balance_E(10.0), "B": balance_E(50.0)}
+NAMES = {"A": "A：すべて鈍い型", "B": "B：打ち消し合い型", "C": "C：結びついた型", "R": "R：役割分担型"}
+COLORS = {"A": BLUE, "B": ORANGE, "C": "#a3401a", "R": AQUA}
+
+def q10_rate(E):
+    """活性化エネルギー E (kJ/mol) の反応の、25 °C から 35 °C での速度の Q10"""
+    return np.exp(E / R_GAS * (1 / 298.15 - 1 / 308.15))
+```
+
+2つの型の帳簿を並べたのが @fig-ledger です。すべて鈍い型では S → ST の活性化エネルギーが `{python} f"{STRATEGIES['A']['SD_b']:.0f}"` kJ/mol、打ち消し合い型では `{python} f"{STRATEGIES['B']['SD_b']:.0f}"` kJ/mol になりました。どちらも合計はゼロですが、すべて鈍い型は小さな項の集まり、打ち消し合い型は大きな項の打ち消し合いです。
+
+```{python}
+#| label: fig-ledger
+#| fig-cap: "2つの型の帳簿。各反応の寄与 $C_i E_i$ を並べた。どちらも合計はゼロ。"
+#| fig-width: 9
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, axes = plt.subplots(1, 2, sharex=True, sharey=True)
+for ax, key in zip(axes, ("A", "B")):
+    contrib = np.array([C[n] * STRATEGIES[key][n] for n in RATE_NAMES])
+    ax.barh([LABELS[n] for n in RATE_NAMES], contrib,
+            color=[ORANGE if c > 0 else BLUE for c in contrib], height=0.62)
+    ax.axvline(0, color=INK2, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.set_title(NAMES[key], fontsize=10.5, loc="left")
+    ax.set_xlabel("寄与 (kJ/mol)")
+    ax.grid(axis="y", visible=False)
+fig.tight_layout()
+plt.show()
+```
+
+### 温度の範囲
+
+2つの型で、温度を 0 °C から 50 °C まで変えてみます（@fig-strategies-temp）。
+
+```{python}
+#| label: strategy-sweep
+temps_wide = np.arange(0.0, 50.01, 0.5)
+sweep = {}
+for key in ("A", "B"):
+    per, amp = period_amp([at_temperature(p0, T, STRATEGIES[key]) for T in temps_wide], t_end=2000, t_skip=1300)
+    ok = np.isfinite(per)
+    sweep[key] = dict(per=per, amp=amp, lo=temps_wide[ok].min(), hi=temps_wide[ok].max())
+amp_ratio_A = sweep["A"]["amp"][np.argmin(abs(temps_wide - 20))] / sweep["A"]["amp"][np.argmin(abs(temps_wide - 30))]
+```
+
+```{python}
+#| label: fig-strategies-temp
+#| fig-cap: "2つの型での周期（左）と振幅（右）の温度依存性。振動が止まった温度では線が途切れる（振幅は0）。"
+#| fig-width: 10
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots(1, 2)
+for key in ("A", "B"):
+    ax[0].plot(temps_wide, sweep[key]["per"], color=COLORS[key], label=NAMES[key])
+    ax[1].plot(temps_wide, sweep[key]["amp"], color=COLORS[key], label=NAMES[key])
+ax[0].set(ylim=(15, 40), xlabel="温度 (°C)", ylabel="周期 (h)")
+ax[0].legend(fontsize=9)
+ax[1].set(xlabel="温度 (°C)", ylabel="振幅（T+ST+S の山と谷の差, µM）")
+fig.tight_layout()
+plt.show()
+```
+
+すべて鈍い型は、`{python} f"{sweep['A']['lo']:.1f}"` °C から、調べた範囲の上限の `{python} f"{sweep['A']['hi']:.0f}"` °C まで、ほとんど同じ周期で振動し続けます。どの反応も温度に鈍いので、当然といえば当然です。一方、打ち消し合い型が振動するのは `{python} f"{sweep['B']['lo']:.1f}"`〜`{python} f"{sweep['B']['hi']:.1f}"` °C だけです。帳簿は 30 °C でつり合わせただけなので、そこから離れると反応どうしの速さの比が大きく変わり、やがて振動そのものが保てなくなります。振幅の振る舞いにも違いがあります。すべて鈍い型の振幅は温度とともにゆるやかに変わるだけで、20 °C でも 30 °C の `{python} f"{amp_ratio_A * 100:.0f}"`% あります。打ち消し合い型の振幅は、温度を下げるにつれて急速に小さくなっていきます。この違いは、次の章で効いてきます。
+
+### 変異への強さ
+
+もうひとつ、変異に対する強さを比べてみます。実際の KaiC では、アミノ酸を1か所置き換えて周期を大きく変えても、温度補償はほぼ保たれます [@itomiwa2020]。そこで、10個のパラメータ（9つの速度定数と $K_{1/2}$）をひとつずつ 0.67 倍または 1.5 倍にした「変異体」をつくり、活性化エネルギーはそのままで Q~10~ がどうなるかを調べました。Q~10~ は 28 °C と 32 °C の周期から換算し、25 °C か 35 °C で振動が止まってしまった数も数えます。
+
+```{python}
+#| label: mutation
+def mutation_test(p, E, temps=(25.0, 28.0, 32.0, 35.0)):
+    """パラメータを1つずつ 0.67 倍・1.5 倍にした20通りの変異体で、Q10 と振動の停止を調べる"""
+    plist = []
+    for n in RATE_NAMES + ["KHALF"]:
+        for fac in (0.67, 1.5):
+            q = dict(p)
+            q[n] = p[n] * fac
+            plist += [at_temperature(q, T, E) for T in temps]
+    per, _ = period_amp(plist, t_end=2000, t_skip=1300)
+    per = per.reshape(-1, len(temps))
+    q10_local = (per[:, 1] / per[:, 2]) ** 2.5                 # 28 °C と 32 °C から換算
+    lost = np.isnan(per[:, 0]) | np.isnan(per[:, 3])
+    return dict(q10=q10_local, lost=int(lost.sum()), n=len(per),
+                med=np.nanmedian(np.abs(np.log(q10_local))))
+
+mut = {key: mutation_test(p0, STRATEGIES[key]) for key in ("A", "B")}
+```
+
+```{python}
+#| label: fig-mutation
+#| fig-cap: "1つのパラメータを 0.67 倍または 1.5 倍にした変異体での Q~10~（28 °C と 32 °C の周期から換算）。黄色の帯は 0.9〜1.1。上の数字は、25 °C か 35 °C で振動が止まった変異体の数。"
+#| fig-width: 5.6
+#| fig-height: 4
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots()
+jitter = np.random.default_rng(0)
+for k, key in enumerate(("A", "B")):
+    q = mut[key]["q10"]
+    fin = np.isfinite(q)
+    ax.scatter(k + jitter.uniform(-0.15, 0.15, fin.sum()), q[fin], s=28, color=COLORS[key],
+               edgecolor="white", lw=0.8, zorder=3)
+    ax.text(k, 1.33, f"振動停止 {mut[key]['lost']}/{mut[key]['n']}", ha="center", fontsize=9, color=INK2)
+ax.axhspan(0.9, 1.1, color=YELLOW, alpha=0.25, lw=0)
+ax.set_xticks(range(2), [NAMES[k] for k in ("A", "B")])
+ax.set(xlim=(-0.6, 1.6), ylim=(0.3, 1.42), ylabel="変異体の Q10")
+ax.grid(axis="x", visible=False)
+plt.show()
+```
+
+結果は @fig-mutation のとおりです。すべて鈍い型では、ほとんどの変異体で Q~10~ が1の近くに留まり（$|\ln Q_{10}|$ の中央値 `{python} f"{mut['A']['med']:.3f}"`）、25 °C か 35 °C で振動が止まったのは `{python} f"{mut['A']['lost']}"` 個でした。打ち消し合い型では Q~10~ が大きくばらつきます（中央値 `{python} f"{mut['B']['med']:.3f}"`）。大きな項の打ち消し合いでつり合っている帳簿は、変異で制御係数が少し変わっただけで傾いてしまうのです。振動が止まった変異体も `{python} f"{mut['B']['lost']}"` 個ありました。ただし、打ち消し合い型はもともと 24.5 °C より下では振動しないので、25 °C は振動できる範囲の端にあたります。この数には、変異への弱さだけでなく、変異前から振動できる範囲が狭いことも効いています。
+
+ただし、これは 30 °C の一点で大きな項をつり合わせた、この型での結果です。8章で見るように、打ち消し合い型の 30 °C は、振動が止まる分岐点（約24 °C）からあまり離れていません。Fu らは、周期を延ばす反応による補償は、振動が始まる点（分岐点）から十分に離れた領域では、広いパラメータの範囲で成り立つと報告しています [@fu2024]。ここで見た弱さには、打ち消し合いという方法そのものだけでなく、分岐点に近いというこのモデルの動作点も効いているはずです。打ち消し合いによる補償が、いつでも壊れやすいわけではありません。また、ここでの変異は速度定数の大きさだけを変え、活性化エネルギーは変えていません。実際には、1か所の変異で反応の温度依存性そのものが変わる例もあります [@furuike2022]。
+
+広い温度範囲で動き、変異にも強い。ここまでの比較では、すべて鈍い型のほうが優れた時計に見えます。けれども1章で挙げたように、時計には温度に左右されないことのほかに、もうひとつ大事な性質がありました。温度を感じることです。
+
+## 時計は温度を感じなければならない {#sec-sensing}
+
+時計が温度を感じていることは、2つの実験からわかります。ひとつは、冷やすと時計が止まること。もうひとつは、温度の周期に時計が同調することです。
+
+### 低温で時計が止まる
+
+温度補償といっても、どんな温度でも時計が動くわけではありません。Murayama らは、試験管内の KaiABC 時計を少しずつ冷やしていき、その振る舞いを詳しく調べました [@murayama2017]。温度を下げると、振幅は大きく小さくなっていく一方、周期の変化は小さいまま、約19 °C で振動が消えました。それより低い温度では、外から刺激を与えると減衰しながら揺れる、減衰振動になります。生きた細胞の中の時計も、同じ型の分岐を通って低温で止まることが、1細胞の観察から示されています [@mihalcescu2025]。こうした振る舞いは、実験より前に理論で予言されていました。複数の反応が限られた量の KaiA を奪い合うことで温度補償が起きる、という Hatakeyama と Kaneko のモデルでは、温度を下げると振幅が小さくなり、やがて Hopf 分岐で振動が消えます [@hatakeyama2012]。
+
+振動が消えるときの振る舞いには、典型的な2つの型があります。ひとつは、振幅がだんだん小さくなってゼロになる一方、周期は有限のまま保たれる型で、Hopf 分岐と呼ばれます。もうひとつは、振幅は保たれたまま周期がどこまでも長くなっていく型で、SNIC 分岐（不変円上のサドルノード分岐）と呼ばれます。周期がほぼ一定のまま振幅が消えていくという実験結果は、Hopf 分岐を示しています。
+
+あとでモデルと比べるために、Murayama らの論文の図から、温度ごとの周期と振幅を読み取っておきます。
+
+```{python}
+#| label: murayama-data
+#| code-fold: true
+#| code-summary: "実験データ（Murayama et al. 2017 の Fig. 2B から読み取った値）"
+murayama = np.array([   # 温度 (°C), 周期 (h), 振幅（リン酸化 KaiC の割合の山と谷の差）
+    [19.55, 28.58, 0.017], [20.55, 27.88, 0.039], [21.24, 27.73, 0.062], [22.13, 27.09, 0.076],
+    [23.03, 26.86, 0.095], [23.92, 26.53, 0.113], [24.82, 26.43, 0.120], [25.61, 26.34, 0.138],
+    [27.40, 27.12, 0.147], [28.30, 26.46, 0.162], [29.91, 26.37, 0.185]])
+```
+
+### モデルの中の Hopf 分岐
+
+7章の @fig-strategies-temp を見直すと、打ち消し合い型は低温側で振動が止まっていました。その仕組みを調べてみます。
+
+振動が止まった状態とは、各リン酸化型の濃度が一定値に落ち着いた状態、つまり微分方程式の定常状態です。定常状態からわずかにずれたとき、そのずれは $e^{\lambda t}$ のように時間変化します。$\lambda$ は定常状態でのヤコビ行列の固有値です。実部が負ならずれは消えて定常状態が安定になり、実部が正ならずれが育って振動が生まれます。Hopf 分岐は、虚部を持つ固有値のペアの実部が、温度などのパラメータの変化によって負から正へと符号を変える点です。分岐点の近くで生まれる振動の周期は、固有値の虚部から $2\pi / \mathrm{Im}\,\lambda$ と予測できます。
+
+```{python}
+#| label: hopf
+from scipy.optimize import fsolve
+
+def f1(x, q):
+    return rhs(np.asarray(x).reshape(3, 1), q).ravel()
+
+def jacobian(x, q, h=1e-7):
+    J = np.zeros((3, 3))
+    f0 = f1(x, q)
+    for j in range(3):
+        xx = np.array(x, float); xx[j] += h
+        J[:, j] = (f1(xx, q) - f0) / h
+    return J
+
+def fixed_point(q):
+    x = fsolve(lambda x: f1(x, q), [0.8, 0.45, 0.57], xtol=1e-13)
+    assert np.linalg.norm(f1(x, q)) < 1e-9
+    return x
+
+E_B = STRATEGIES["B"]
+T_grid = np.round(np.arange(21.0, 30.01, 0.25), 2)
+lam = []
+for T in T_grid:
+    q = at_temperature(p0, T, E_B)
+    ev = np.linalg.eigvals(jacobian(fixed_point(q), q))
+    lam.append(ev[np.argmax(ev.real)])
+lam = np.array(lam)
+T_c = np.interp(0.0, lam.real, T_grid)          # 実部がゼロを横切る温度
+
+# 分岐点のすぐ上での振幅と周期（収束が遅いので長く積分する）
+T_fine = np.round(np.arange(24.30, 25.01, 0.02), 2)
+per_fine, amp_fine = period_amp([at_temperature(p0, T, E_B) for T in T_fine],
+                                t_end=8000, t_skip=7000, dt=0.02)
+```
+
+```{python}
+#| label: fig-hopf
+#| fig-cap: "打ち消し合い型での低温側の Hopf 分岐。（左）定常状態の固有値の実部。（中）分岐点付近の振幅。（右）分岐点付近の周期と、固有値の虚部から予測した周期 $2\\pi/\\mathrm{Im}\\,\\lambda$。破線は分岐点。"
+#| fig-width: 12
+#| fig-height: 3.6
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots(1, 3)
+ax[0].plot(T_grid, lam.real, color=ORANGE)
+ax[0].axhline(0, color=INK2, lw=0.8)
+ax[0].set(xlabel="温度 (°C)", ylabel="固有値の実部の最大値 (1/h)")
+ax[1].plot(T_fine, amp_fine, "o", color=ORANGE, ms=4)
+ax[1].set(xlabel="温度 (°C)", ylabel="振幅 (µM)")
+ax[2].plot(T_fine, per_fine, "o", color=ORANGE, ms=4, label="シミュレーション")
+ax[2].plot(T_grid, 2 * np.pi / np.abs(lam.imag), color=INK2, lw=1, label="2π / Im λ")
+ax[2].set(xlim=(23, 26), ylim=(20, 24), xlabel="温度 (°C)", ylabel="周期 (h)")
+ax[2].legend(fontsize=9)
+for a in ax:
+    a.axvline(T_c, color=MUTED, ls="--", lw=1)
+fig.tight_layout()
+plt.show()
+```
+
+@fig-hopf の左を見ると、固有値の実部は `{python} f"{T_c:.2f}"` °C でゼロを横切っています。右の図のとおり、分岐点のすぐ上で生まれる振動の周期は約 `{python} f"{np.nanmean(per_fine[:8]):.0f}"` 時間で有限であり、固有値の虚部からの予測ともよく合います。モデルの中でも、振動は Hopf 分岐によって止まっているのです。
+
+ただし、振幅の振る舞いは実験と違います。Hopf 分岐のすぐ上では、振幅は分岐点からの距離の平方根に比例して育つはずです。モデルでもそうなってはいるのですが、その範囲は 0.1 °C 程度しかありません。振幅は分岐点を越えると急に立ち上がり、S 型が KaiA をすべて捕まえる境界（@fig-phase の破線）に届いたところで頭打ちになります。@eq-freeA の、KaiA を捕まえる鋭いスイッチのせいです。実験では、振幅は10 °C ほどかけてなだらかに減っていきました。この違いには、10章でもう一度戻ってきます。
+
+一方、すべて鈍い型が止まるのは `{python} f"{sweep['A']['lo']:.1f}"` °C 付近で、実験の約19 °C よりはるかに低い温度です。すべての反応が温度に鈍ければ、冷やしても反応どうしの速さの比はほとんど変わらないので、振動はなかなか止まりません。
+
+### 分岐点に近づくと補償が崩れる
+
+分岐点の近くでは、温度補償そのものも弱くなります。打ち消し合い型で、温度ごとに制御係数を計算し直してみましょう（@tbl-cc-temperature）。
+
+```{python}
+#| label: tbl-cc-temperature
+#| tbl-cap: "打ち消し合い型での、温度ごとの周期と制御係数。帳簿は $\\sum_i C_i E_i$（kJ/mol）。右端の列は、1周期のうち KaiA がすべて捕まっている時間の割合。"
+from IPython.display import Markdown
+T_tbl = (24.6, 25.0, 27.5, 30.0, 32.5, 35.0, 36.5)
+# KaiA がすべて捕まっている（自由な KaiA が 0 の）時間の割合。分岐点の近くは落ち着くのが遅いので長く積分する
+t_sq, y_sq = integrate(stack([at_temperature(p0, T, E_B) for T in T_tbl]), 9000, dt=0.01, record_every=2)
+S_sq = y_sq[t_sq > 7000][:, 2, :]
+seq_frac = {T: np.mean(p0["KAIA"] - 2 * S_sq[:, j] <= 0) for j, T in enumerate(T_tbl)}
+lines = ["| 温度 (°C) | 周期 (h) | C (S→ST) | C (ST→S, KaiAなし) | ΣC | 帳簿 | KaiA が捕まっている時間 |",
+         "|--:|--:|--:|--:|--:|--:|--:|"]
+for T in T_tbl:
+    q = at_temperature(p0, T, E_B)
+    CT = control_coeffs(q, RATE_NAMES)
+    tau_T = period_amp([q])[0][0]
+    ledger = sum(CT[n] * E_B[n] for n in RATE_NAMES)
+    lines.append(f"| {T} | {tau_T:.2f} | {CT['SD_b']:+.2f} | {CT['DS_f']:+.2f} | "
+                 f"{sum(CT.values()):+.3f} | {ledger:+.1f} | {seq_frac[T] * 100:.0f}% |")
+Markdown("\n".join(lines))
+```
+
+30 °C で `{python} f"{C['SD_b']:+.2f}"` だった S → ST の制御係数は、分岐点に近づくにつれて小さくなり、帳簿は負に傾きます。分岐点に近づくと、1周期のうち KaiA がすべて捕まっている時間が短くなっていきます（表の右端の列、30 °C の `{python} f"{seq_frac[30.0] * 100:.0f}"`% から 24.6 °C の `{python} f"{seq_frac[24.6] * 100:.0f}"`%）。6章で見たように、S → ST は、KaiA が自由な時間と捕まっている時間をともに延ばすことで周期を延ばしていました。スイッチの効いている相が短くなれば、その効きも弱まるのです。分岐点の近くでは周期を延ばす反応が効きにくくなるという点は、Fu らが一般的な振動子のモデルで指摘したことと一致します [@fu2024]。反対に、高温側では制御係数が大きくなりすぎて帳簿が正に傾き、周期が急に延びていきます。帳簿が 30 °C でつり合っていても、その外側では温度とともに制御係数そのものが変わってしまうのです。一方、総和則 ΣC = −1 は、どの温度でも保たれています（分岐点のすぐ近くの 24.6 °C でずれが少し大きいのは、振動が落ち着くまでに長い時間がかかり、周期の数値誤差が大きくなるためです）。
+
+実験でも、同じ傾向が見えます。Murayama らのデータでは、`{python} f"{murayama[-1, 0]:.1f}"` °C で `{python} f"{murayama[-1, 1]:.1f}"` 時間だった周期が、振動が消える直前の `{python} f"{murayama[0, 0]:.1f}"` °C では `{python} f"{murayama[0, 1]:.1f}"` 時間と、約 `{python} f"{(murayama[0, 1] / murayama[-1, 1] - 1) * 100:.0f}"`% 延びています。振幅がほぼ0になるまでの変化に比べれば小さく、周期がどこまでも延びる SNIC 分岐とは違います。それでも、分岐点の近くで補償が崩れるという予想とは合っています。
+
+### 温度の周期に同調できるか
+
+1章で、温度補償と同調は矛盾しているように見える、と書きました。温度の周期に同調するには、時計は温度を感じ取らなければなりません。では、温度補償された2つの型は、温度の周期に同調できるのでしょうか。
+
+同調するかどうかは、時計の自然な周期と温度サイクルの周期の差に大きく左右されます。そこでここからは、モデルのすべての速度定数を一律に縮めて、30 °C の周期を、Yoshida らが試験管内で測った 23.1 時間 [@yoshida2009] に合わせて比べます。これは時間の目盛りを変えるだけなので、温度依存性には影響しません。そのうえで、30 °C を中心に振幅 ±ΔT の24時間周期で温度を正弦波状に変化させ、振動の周期が24時間に引き込まれるかを調べます。
+
+```{python}
+#| label: forced
+p_ref = {**p0, **{n: p0[n] * tau0 / 23.1 for n in RATE_NAMES}}     # 30 °C の周期を 23.1 h に
+
+def run_forced(p, E_rows, temp_fun, t_end=2400.0, t_skip=1400.0):
+    """温度を時間とともに変えながら N 組を同時に積分し、各組の周期の平均とばらつきを返す。
+    E_rows は (N, 9) の活性化エネルギー、temp_fun(t) は各組の温度 (°C) の配列を返す関数"""
+    E_rows = np.asarray(E_rows, float)
+    N = len(E_rows)
+    base = {k: np.full(N, v) for k, v in p.items()}
+    T0K = T_REF + 273.15
+    def params_at(t):
+        TK = temp_fun(t) + 273.15
+        fac = np.exp(-(E_rows / R_GAS) * (1.0 / TK[:, None] - 1.0 / T0K))
+        q = dict(base)
+        for i, n in enumerate(RATE_NAMES):
+            q[n] = p[n] * fac[:, i]
+        return q
+    t, y = integrate(base, t_end, dt=0.01, forcing=params_at, record_every=10)
+    m = t >= t_skip
+    Ptot = y[m].sum(axis=1)
+    stats = []
+    for j in range(N):
+        d = np.diff(crossing_times(t[m], Ptot[:, j]))
+        stats.append((d.mean(), d.std()) if len(d) >= 3 else (np.nan, np.nan))
+    return np.array(stats), t, y
+
+def is_locked(stat, T_cycle):
+    return abs(stat[0] - T_cycle) < 0.05 and stat[1] < 0.05
+
+def sine_entrainment(keys, dTs=(1.0, 2.0, 3.0, 5.0), t_end=3000.0, t_skip=2000.0):
+    members = [(k, dT) for k in keys for dT in dTs]
+    amp_arr = np.array([dT for _, dT in members])
+    stats, t, y = run_forced(p_ref, [[STRATEGIES[k][n] for n in RATE_NAMES] for k, _ in members],
+                             lambda t: 30.0 + amp_arr * np.sin(2 * np.pi * t / 24.0), t_end, t_skip)
+    min_lock = {k: min([dT for (kk, dT), s in zip(members, stats) if kk == k and is_locked(s, 24.0)],
+                       default=np.nan) for k in keys}
+    return min_lock, members, t, y
+
+min_lock, members_sine, t_sine, y_sine = sine_entrainment(("A", "B"))
+```
+
+```{python}
+#| label: fig-entrain
+#| fig-cap: "30 ± 2 °C の24時間温度サイクルを与えたときの、すべて鈍い型（青）と打ち消し合い型（オレンジ）のリン酸化 KaiC の合計。点線は24時間ごとの目盛り。"
+#| fig-width: 9
+#| fig-height: 4.4
+#| code-fold: true
+#| code-summary: "図のコード"
+w = t_sine >= t_sine[-1] - 24 * 6
+tt = t_sine[w] - t_sine[w][0]
+fig, (axT, axP) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=[1, 3]))
+axT.plot(tt, 30 + 2 * np.sin(2 * np.pi * t_sine[w] / 24), color=MUTED, lw=1.2)
+axT.set_ylabel("温度 (°C)")
+for key in ("A", "B"):
+    j = members_sine.index((key, 2.0))
+    axP.plot(tt, y_sine[w][:, :, j].sum(axis=1), color=COLORS[key], label=NAMES[key])
+for d in range(7):
+    for a in (axT, axP):
+        a.axvline(24 * d, color=MUTED, lw=0.6, ls=":")
+axP.set(xlabel="時間 (h)", ylabel="T+ST+S (µM)", ylim=(0.45, 2.45))
+axP.legend(loc="lower left", ncol=2, fontsize=9)
+fig.tight_layout()
+plt.show()
+```
+
+打ち消し合い型は、±`{python} f"{min_lock['B']:.0f}"` °C の小さな温度サイクルで周期が24時間に引き込まれ、毎日同じ時刻に山が来るようになります。ところがすべて鈍い型は、±`{python} f"{min_lock['A']:.0f}"` °C まで振れ幅を大きくしないと同調しませんでした（@fig-entrain の青い線は、±2 °C では24時間の目盛りに対して山の位置が毎日ずれていきます）。温度補償された時計は、自然な周期の近くの温度サイクルになら原理的には同調できることが示されています [@bodenstein2012]。けれども、温度に鈍い時計ほど、温度の周期に引き込まれにくいのです。
+
+なぜ、周期が温度補償されているのに、温度サイクルに同調できるのでしょうか。@fig-limitcycles は、28 °C と 32 °C でのリミットサイクルを重ねたものです。すべて鈍い型では、2つの温度のリミットサイクルがほとんど重なっています。一方、打ち消し合い型では、周期はほぼ同じなのに、リミットサイクルの大きさと位置が温度によって変わっています。温度が変わると、時計の状態は新しい温度のリミットサイクルから少し外れた場所に取り残され、そこから新しいリミットサイクルに戻っていきます。そのあいだに位相がずれるのです。1周にかかる時間（周期）は温度で変わらなくても、時計の「軌道」そのものは温度で動く。これが、温度補償と同調が両立する理由のひとつです。最近の査読前の論文（プレプリント）でも、Liu らは序論で先行研究 [@yoshida2009; @francois2012] を引きながら、温度によってリミットサイクルの大きさと位置が変わり、周期はほぼ変わらないことが、温度の変化に応じて位相をずらすことを可能にしている、と位置づけています [@liu2026]。周期を補償する仕組みそのものがリミットサイクルを動かし、それが位相のずれを生むので、周期の頑健さと位相の変わりやすさは表裏一体だ、という関係は、KaiC のモデルを含むいくつかの時計のモデルで示されています [@hatakeyama2015]。ただし、位相がずれる仕組みはこれだけではありません。軌道の形が変わらなくても、軌道のどこを速く進み、どこをゆっくり進むかという配分が温度で変われば、温度が変わった瞬間に位相はずれます。波形のこうした歪みが、温度補償と同調できる範囲の両方に効くことを示した研究もあります [@gibo2025]。多くの反応のつり合いで周期が補償されている時計では、時計のタンパク質の平均の量が温度で変わるので、リミットサイクルの形も温度で変わるはずだということは、François らも指摘しています [@francois2012]。
+
+```{python}
+#| label: fig-limitcycles
+#| fig-cap: "28 °C（実線）と 32 °C（破線）でのリミットサイクル。（左）すべて鈍い型。（右）打ち消し合い型。周期はどちらの型でもほぼ同じだが、打ち消し合い型では軌道の位置と大きさが温度で変わる。"
+#| fig-width: 9
+#| fig-height: 4
+#| code-fold: true
+#| code-summary: "図のコード"
+def plot_limitcycles(ax, key):
+    qs = [at_temperature(p0, T, STRATEGIES[key]) for T in (28.0, 32.0)]
+    tl, yl = integrate(stack(qs), 600, dt=0.01, record_every=5)
+    pers = period_amp_from(tl, yl, 300)[0]
+    for j, (ls, T) in enumerate((("-", 28), ("--", 32))):
+        one = tl >= tl[-1] - pers[j]                       # 最後の1周期分だけを描く
+        yy = yl[one][:, :, j]
+        ax.plot(yy[:, 2], yy.sum(axis=1), linestyle=ls, color=COLORS[key], lw=1.6,
+                label=f"{T} °C（周期 {pers[j]:.1f} h）")
+    ax.set(xlim=(0.3, 0.9), ylim=(0.75, 2.45), xlabel="S 型 KaiC (µM)")
+    ax.set_title(NAMES[key], fontsize=10.5, loc="left")
+    ax.legend(fontsize=8.5, loc="upper right")
+
+fig, axes = plt.subplots(1, 2)
+for ax, key in zip(axes, ("A", "B")):
+    plot_limitcycles(ax, key)
+axes[0].set_ylabel("T+ST+S (µM)")
+fig.tight_layout()
+plt.show()
+```
+
+実際の試験管内の時計も、温度サイクルに同調します。Yoshida らは、30 °C と 45 °C を行き来する温度サイクルに試験管内の時計が同調し、しかも温度を上げたり下げたりした瞬間に、そのときの位相に応じて位相が段階的にずれることを示しました [@yoshida2009]。周期は変えずに、温度の変化の瞬間に位相をずらす。モデルで見た仕組みと同じです。KaiA と KaiB の捕捉の温度依存性によって温度補償と温度同調が両立しうることは、捕捉のフィードバックに注目した別のモデルでも論じられています [@brettschneider2010]。
+
+こうして、2つの型の長所と短所は正反対になりました。すべて鈍い型は、広い温度範囲で動き、変異にも強い代わりに、低温で止まらず、温度の周期にもなかなか同調しません。打ち消し合い型は、低温で止まり、温度の周期にもよく同調する代わりに、狭い温度範囲でしか動かず、変異にも弱い。温度に鈍いことと、温度を感じることは、やはり両立しないのでしょうか。
+
+手がかりは @fig-limitcycles にあります。温度を感じることの表れのひとつは、周期を変えずに、リミットサイクルの形や位置を変えることでした。そうであれば、周期と同じように、リミットサイクルの形や、温度による位相のずれ方についても、帳簿をつけてみればよいはずです。
+
+## 振幅と位相応答の帳簿 {#sec-amplitude}
+
+### 振幅の制御係数
+
+リミットサイクルの形を表す量はいろいろありますが、ここでは代表として振幅 $A$（リン酸化された KaiC の合計 T+ST+S の、山と谷の差）を使います。周期のときと同じように、振幅の制御係数を
+
+$$
+C^{A}_i = \frac{\partial \ln A}{\partial \ln k_i}
+$$ {#eq-cca}
+
+と定義します。
+
+振幅の制御係数にも総和則があります。すべての速度定数を同じ倍率で速めることは、時計を早送りすることでした。早送りしても、各リン酸化型の濃度がどこまで上がり、どこまで下がるかは変わりません。変わるのは時間の目盛りだけです。したがって振幅は変わらず、
+
+$$
+\sum_i C^{A}_i = 0
+$$ {#eq-sum-a}
+
+となります。周期の総和則 @eq-sum の右辺が −1 なのに対して、振幅の総和則の右辺は0です。この2つの総和則は、振動の代謝制御解析ですでに導かれています [@kholodenko1997]。
+
+温度を変えたときの振幅の変化も、@eq-dlntau と同じ形に書けます。
+
+$$
+\frac{d \ln A}{d T} = \frac{1}{RT^{2}} \sum_i C^{A}_i E_i
+$$ {#eq-dlnA}
+
+周期の帳簿 $\sum_i C_i E_i$ がゼロなら、周期は温度で変わりません。振幅の帳簿 $\sum_i C^A_i E_i$ がゼロでなければ、振幅は温度とともに変わります。2つの帳簿は別々のものなので、片方をつり合わせたまま、もう片方を傾けておくことができるはずです。
+
+振幅の総和則からは、もうひとつ大事なことが言えます。@eq-sum-a を使うと、振幅の帳簿は、活性化エネルギーの平均 $\bar{E}$ からのずれを使って
+
+$$
+\sum_i C^{A}_i E_i = \sum_i C^{A}_i \left(E_i - \bar{E}\right)
+$$ {#eq-amp-dev}
+
+と書き直せます（$\sum_i C^A_i = 0$ なので、$\bar{E}$ は平均でなくても、どんな定数に置き換えても成り立ちます。効いてくるのは、反応どうしで、活性化エネルギーと振幅の制御係数がどう相関しているかです）。すべての反応の活性化エネルギーが同じなら、右辺はゼロで、振幅は温度で変わりません。振幅が温度とともに大きくなるには、活性化エネルギーが反応ごとにばらついていて、しかも、振幅を大きくする反応（$C^A_i > 0$）ほど活性化エネルギーが大きい、という傾向がなければなりません。つまり、温度補償された時計の振幅が温度とともに変わるという観察そのものが、時計の中の反応の活性化エネルギーがそろっていないことの証拠になるのです。
+
+ただし、これは温度が速度定数だけを変える場合の話です。$K_{1/2}$ のような平衡定数も温度で変われば、その分も振幅の帳簿に加わります。正確に言えば、振幅が温度で変わるなら、温度の効果は時計全体を一律に早送りするだけではない、ということです。観察から直接に否定できるのは、この「一律の早送り」という仮定です。温度に鈍い反応を中心にした仕組みまで否定できるわけではありません。活性化エネルギーの差が小さくても、時計が分岐点に近ければ、振幅は大きく変わりうるからです（すぐあとで見るように）。
+
+温度補償された時計で、温度とともに変わるものがあることは、いくつも知られています。アカパンカビでは時計のタンパク質 FRQ の量が [@liu1998]、ラットの培養細胞では一部の時計遺伝子の発現の振幅が [@kurosawa2017]、そして KaiABC 時計ではリン酸化のリズムの振幅が [@murayama2017]、温度とともに変わります。理論的にも、温度補償された振動子では、振幅が温度とともに大きくなると予想されていました [@ruoff2003]。ここでは、それを周期の帳簿と並べて、制御係数の言葉で書いてみます。
+
+```{python}
+#| label: amplitude-coeffs
+def amplitude_coeffs(p, names, h=0.01):
+    """振幅（T+ST+S の山と谷の差）の制御係数。山と谷を正確にとるため、細かい間隔で記録する"""
+    plist = []
+    for n in names:
+        for s in (+1, -1):
+            q = dict(p)
+            q[n] = p[n] * np.exp(s * h)
+            plist.append(q)
+    t, y = integrate(stack(plist), 1000, dt=0.01, record_every=1)
+    _, amp = period_amp_from(t, y, 600)
+    return {n: (np.log(amp[2 * i]) - np.log(amp[2 * i + 1])) / (2 * h) for i, n in enumerate(names)}
+
+CA_all = amplitude_coeffs(p0, RATE_NAMES + ["KHALF"])
+CA = {n: CA_all[n] for n in RATE_NAMES}
+CA_sum = sum(CA.values())
+amp_ledger = {key: sum(CA[n] * STRATEGIES[key][n] for n in RATE_NAMES) for key in ("A", "B")}
+
+# Murayama らのデータ（25〜30 °C）での振幅の増え方を、帳簿の値に直す
+i25, i30m = np.argmin(abs(murayama[:, 0] - 25)), np.argmin(abs(murayama[:, 0] - 30))
+slope_exp = np.log(murayama[i30m, 2] / murayama[i25, 2]) / (murayama[i30m, 0] - murayama[i25, 0])
+ledger_exp = slope_exp * R_GAS * (T_REF + 273.15) ** 2
+
+# 振幅の2乗を温度の1次式で当てはめて（26 °C 以下）、Hopf 分岐の温度を見積もる
+low = murayama[:, 0] < 26
+sl, ic = np.polyfit(murayama[low, 0], murayama[low, 2] ** 2, 1)
+Tc_fit = -ic / sl
+hopf_ledger = R_GAS * (27.5 + 273.15) ** 2 / (2 * (27.5 - Tc_fit))
+```
+
+数値で確かめると、9つの速度定数について振幅の制御係数を足し合わせた値は `{python} f"{round(CA_sum, 3) + 0.0:.3f}"` で、@eq-sum-a は成り立っています。
+
+この式から、すべて鈍い型が温度を感じにくかった理由がわかります。すべての反応の活性化エネルギーが同じ値 $E_0$ なら、振幅の帳簿は $E_0 \sum_i C^A_i = 0$ となり、振幅は温度で変わりません。すべて鈍い型では S → ST だけが少し違う値を持つので、帳簿は完全にはゼロになりませんが、その値は `{python} f"{amp_ledger['A']:.0f}"` kJ/mol と小さなものです。一方、打ち消し合い型の振幅の帳簿は `{python} f"{amp_ledger['B']:.0f}"` kJ/mol でした。比べるために、Murayama らのデータを見ると、25〜30 °C のあいだで振幅は1 °C あたり約 `{python} f"{(np.exp(slope_exp) - 1) * 100:.0f}"`% ずつ増えていて、@eq-dlnA で帳簿の値に直すと約 `{python} f"{ledger_exp:.0f}"` kJ/mol に相当します。実際の時計の振幅の帳簿は、はっきり傾いているのです。@eq-amp-dev に照らせば、振幅を大きくする反応の活性化エネルギーが、平均よりはっきり大きいということです。
+
+ただし、この値には注意が必要です。Murayama らのデータでは、振幅の2乗が温度にほぼ比例して小さくなっていきます。これは Hopf 分岐のすぐ上で期待される形で、そのとき $d\ln A/dT = 1/\{2(T - T_c)\}$ となり、分岐点 $T_c$ に近いほど大きくなります。振幅の2乗を直線で当てはめると $T_c$ は約 `{python} f"{Tc_fit:.1f}"` °C で、27.5 °C でのこの式の値を帳簿の単位に直すと約 `{python} f"{hopf_ledger:.0f}"` kJ/mol です。実験の大きな振幅の帳簿は、25〜30 °C がまだ分岐点に近いことの表れでもあるのです。
+
+### 位相応答の帳簿
+
+振幅の帳簿が教えてくれるのは、温度で振動の大きさがどう変わるか、そして低温で振動が止まりやすいかどうかです。けれども、温度サイクルに同調できるかどうかを直接決めるのは、振幅ではありません。温度が少し変わったときに、時計の位相がどれだけずれるかです。これを位相応答と呼びます。振幅が変わっても、どの位相でも同じだけ時計の進み方が変わるのなら、同調は起きません。
+
+位相 $\phi$（1周を 0〜2π で表す）にいる時計で、反応 $i$ の速度定数をわずかに変えたとき、位相の進む速さがどれだけ変わるかを $g_i(\phi)$ と書きます（速度定数の対数あたり）。温度を $\delta T$ だけ上げると、各速度定数の対数は $E_i\,\delta T / RT^2$ ずつ変わるので、温度に対する位相応答は
+
+$$
+\Gamma_T(\phi) = \frac{1}{RT^{2}} \sum_i E_i\, g_i(\phi)
+$$ {#eq-gamma}
+
+となります。周期や振幅と同じ形の帳簿ですが、今度は位相ごとに値を持つ帳簿です。
+
+ここでも、早送りの考え方が効きます。すべての速度定数を同じ割合で速めると、時計は同じ軌道を同じ割合で速く回るだけなので、どの位相でも、位相の進む速さは同じ割合で速くなります。つまり、$\sum_i g_i(\phi)$ は位相によらず、時計の角振動数 $\omega = 2\pi/\tau$ に等しくなります。また、$g_i$ を1周で平均したものは $-\omega C_i$ になります（速度定数を変えたときの周期の変化そのものだからです）。位相応答を1周たどると周期の変化が得られるというこの関係は、振動子の感度解析ではすでに知られています [@gunawan2006; @taylor2008]。この2つから、
+
+$$
+\Gamma_T(\phi) = -\frac{\omega}{RT^{2}} \sum_i C_i E_i + \frac{1}{RT^{2}} \sum_i \left(E_i - \bar{E}\right)\left(g_i(\phi) + \omega C_i\right)
+$$ {#eq-gamma-split}
+
+と書けます。第1項は周期の帳簿そのもので、位相によらない一定の値です。周期が補償されていればゼロになります。位相によって変わるのは第2項だけで、それは活性化エネルギーの平均からのずれ $E_i - \bar{E}$ だけで決まります。
+
+ここから、ひとつの結論が出てきます。**温度の効果が時間の早送りだけなら、温度サイクルへの同調は起きません。** 温度が変わっても、どの位相でも同じだけ時計の進み方が変わるだけで、位相をそろえる力が生まれないからです。活性化エネルギーがすべてそろった時計、たとえば5章のすべての反応が 50 kJ/mol の時計がこれにあたります。ただし、振幅のときと同じく、この結論が排除するのは「温度の効果が一律の早送りだけ」という仮定です。周期が補償されていて、しかも温度の影響を受ける時計では、活性化エネルギーは必ずばらついているので、大事なのは、ばらつきがあるかどうかではなく、それがどの反応にどう乗っているかです。
+
+実際に、$g_i(\phi)$ を数値で求めてみます。振動の各位相で、速度定数をひとつずつ、短い時間（30分）だけ少し変え、十分に時間がたってからの位相のずれを測ります。
+
+```{python}
+#| label: prc
+def phase_response(p, names, n_phase=64, eps=0.05, pulse=0.5):
+    """各位相で、パラメータを pulse 時間だけ exp(±eps) 倍したときの位相のずれから、
+    反応ごとの位相応答 g_i(φ)（ln k_i あたりの、位相の進む速さの変化。単位は 1/h）を求める"""
+    t, y = integrate(stack([p]), 1600, dt=0.01, record_every=1)
+    Ptot = y[:, :, 0].sum(axis=1)
+    keep = t > 1200
+    level = Ptot[keep].mean()
+    def up_cross(tt, PP):
+        c = PP - level
+        i = np.where((c[:-1] < 0) & (c[1:] >= 0))[0]
+        return tt[i] - c[i] * (tt[i + 1] - tt[i]) / (c[i + 1] - c[i])
+    tc = up_cross(t[keep], Ptot[keep])
+    tau = np.diff(tc).mean()
+    i0 = np.searchsorted(t, tc[0])                        # 位相 0：T+ST+S が平均値を下から上へ横切る時刻
+    starts = [i0 + int(round(j * tau / n_phase / 0.01)) for j in range(n_phase)]
+    cols = [(j, None, 0) for j in range(n_phase)] + \
+           [(j, n, s) for j in range(n_phase) for n in names for s in (+1, -1)]
+    base = {k: np.full(len(cols), v) for k, v in p.items()}
+    pert = {k: v.copy() for k, v in base.items()}
+    for c, (j, n, s) in enumerate(cols):
+        if n is not None:
+            pert[n][c] *= np.exp(s * eps)
+    x0 = np.concatenate([y[starts[j], :, 0].reshape(3, 1) for j, _, _ in cols], axis=1)
+    tt, yy = integrate(base, 6 * tau, dt=0.01, x0=x0, record_every=2,
+                       forcing=lambda s: pert if s < pulse else base)
+    PP = yy.sum(axis=1)
+    first = []
+    for c in range(len(cols)):
+        cc = up_cross(tt, PP[:, c])
+        first.append(cc[cc > 4 * tau][0])                 # 十分に落ち着いてからの最初の通過時刻
+    first = np.array(first)
+    pos = {col: k for k, col in enumerate(cols)}
+    wrap = lambda d: (d + tau / 2) % tau - tau / 2
+    g = {}
+    for n in names:
+        adv = [wrap(first[pos[(j, None, 0)]] - first[pos[(j, n, +1)]])
+               - wrap(first[pos[(j, None, 0)]] - first[pos[(j, n, -1)]]) for j in range(n_phase)]
+        g[n] = np.array(adv) * (2 * np.pi / tau) / (2 * eps * pulse)
+    return np.arange(n_phase) / n_phase * 2 * np.pi, tau, g
+
+phi_g, tau_g, g_rate = phase_response(p_ref, RATE_NAMES)
+omega_g = 2 * np.pi / tau_g
+RT2 = R_GAS * (T_REF + 273.15) ** 2
+sum_g = sum(g_rate.values()) / omega_g
+
+def gamma_T(E):
+    """温度に対する位相応答 Γ_T(φ)（1 K あたり、単位は 1/h）"""
+    return sum(E[n] * g_rate[n] for n in RATE_NAMES) / RT2
+
+def gamma_first_harmonic(E):
+    """Γ_T の1周期の成分（基本波）の大きさ"""
+    G = gamma_T(E)
+    return np.hypot(2 * np.mean(G * np.cos(phi_g)), 2 * np.mean(G * np.sin(phi_g)))
+```
+
+```{python}
+#| label: fig-prc
+#| fig-cap: "（左）30 °C での、反応ごとの位相応答 $g_i(\\phi)$。どの位相で速度定数を上げると、時計の進みがどれだけ速くなるか（角振動数 ω を1とした比）。黒の破線は9つの反応の合計。（右）温度に対する位相応答 $\\Gamma_T(\\phi)$。その位相で温度を1 °C 上げると、時計の進みが何%速くなるか。横軸の位相 0 は、リン酸化された KaiC の合計が平均値を下から上へ横切る時刻。"
+#| fig-width: 11
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "図のコード"
+hours = phi_g / (2 * np.pi) * tau_g
+fig, ax = plt.subplots(1, 2)
+for n in RATE_NAMES:
+    color = ORANGE if n == "SD_b" else (BLUE if n == "DS_f" else (AQUA if n == "UT_b" else GRID))
+    lw = 2.0 if color != GRID else 1.2
+    ax[0].plot(hours, g_rate[n] / omega_g, color=color, lw=lw,
+               label=LABELS[n] if color != GRID else None, zorder=3 if color != GRID else 2)
+ax[0].plot(hours, sum_g, color=INK2, ls="--", lw=1.4, label="9つの合計")
+ax[0].set(xlabel="位相（時間）", ylabel="$g_i(\\phi)$ / ω")
+ax[0].legend(fontsize=8.5, loc="upper right")
+E_uniform = {n: 50.0 for n in RATE_NAMES}
+for key, E, color, lab in (("U", E_uniform, MUTED, "すべて 50 kJ/mol（補償なし）"),
+                            ("A", STRATEGIES["A"], COLORS["A"], NAMES["A"]),
+                            ("B", STRATEGIES["B"], COLORS["B"], NAMES["B"])):
+    ax[1].plot(hours, gamma_T(E) / omega_g * 100, color=color, label=lab)
+ax[1].axhline(0, color=INK2, lw=0.8)
+ax[1].set(xlabel="位相（時間）", ylabel="$\\Gamma_T(\\phi)$（%/°C）")
+ax[1].legend(fontsize=8.5, loc="lower left")
+fig.tight_layout()
+plt.show()
+```
+
+@fig-prc の左を見ると、反応ごとの位相応答は位相によって大きく変わりますが、9つを足し合わせると、どの位相でも1になります（数値では `{python} f"{sum_g.min():.3f}"`〜`{python} f"{sum_g.max():.3f}"`）。早送りの考え方のとおりです。
+
+右は、温度に対する位相応答です。すべて 50 kJ/mol の時計では、$\Gamma_T$ はどの位相でもほぼ同じ値（約 `{python} f"{np.mean(gamma_T(E_uniform)) / omega_g * 100:.1f}"`%/°C）で、温度を上げると時計がいつでも同じだけ速く進むだけです。これでは、温度サイクルに位相をそろえることはできません。周期が補償されたすべて鈍い型と打ち消し合い型では、平均はゼロで、位相によってプラスとマイナスに振れます。温度が上がったとき、ある位相では時計が少し進み、別の位相では少し遅れる。この偏りが、温度サイクルに位相をそろえる力になります。振れ幅は、打ち消し合い型のほうがずっと大きく、8章で打ち消し合い型のほうがよく同調したことと合っています。
+
+これで、「温度を感じる」ことを2つに分けて見られるようになりました。振幅の変化は振幅の帳簿で、温度サイクルへの同調は位相応答の帳簿で見ます。ただし、振幅の帳簿は 30 °C での局所的な傾きにすぎません。実験のようになだらかな Hopf 分岐なら、上で見た $1/\{2(T - T_c)\}$ の関係を通して、振動が止まる温度ともつながります。けれども、KaiA を捕まえる鋭いスイッチを持つこのモデルでは、振幅は一気に0になるので、30 °C での傾きから止まる温度を予測することはできません。どちらの帳簿でも、効いてくるのは活性化エネルギーの平均からのずれ $E_i - \bar{E}$ です。
+
+### 温度に敏感な反応をどこに置くか
+
+では、周期の帳簿をつり合わせたまま、振幅の帳簿を傾けるには、どうすればよいでしょうか。@fig-two-ledgers は、反応ごとに、周期の制御係数と振幅の制御係数を並べたものです。
+
+```{python}
+#| label: fig-two-ledgers
+#| fig-cap: "30 °C での、各反応の周期の制御係数（横軸）と振幅の制御係数（縦軸）。オレンジは、周期にも振幅にも正に効く S → ST（KaiA）。緑は、周期にはほとんど効かず振幅に強く効く U → T（KaiA）。"
+#| fig-width: 6.4
+#| fig-height: 5
+#| code-fold: true
+#| code-summary: "図のコード"
+offsets = {"UT_b": (8, 4), "TD_b": (-10, 8), "SD_b": (-8, -16), "US_b": (-10, -4), "TU_b": (8, -4),
+           "DT_b": (8, 2), "TU_f": (8, 4), "DS_f": (8, -6), "SU_f": (0, -18), "KHALF": (8, -4)}
+fig, ax = plt.subplots()
+ax.axhline(0, color=MUTED, lw=0.8)
+ax.axvline(0, color=MUTED, lw=0.8)
+for n in RATE_NAMES + ["KHALF"]:
+    x, yv = C_all[n], CA_all[n]
+    color = AQUA if n == "UT_b" else (ORANGE if n == "SD_b" else INK2)
+    ax.plot(x, yv, "o", color=color, ms=8)
+    ha = "right" if offsets[n][0] < 0 else ("center" if offsets[n][0] == 0 else "left")
+    ax.annotate(LABELS.get(n, "K½（結合の定数）"), (x, yv), offsets[n], textcoords="offset points",
+                fontsize=8.5, color=INK2, ha=ha)
+ax.set(xlabel="周期の制御係数 C", ylabel="振幅の制御係数 C^A", xlim=(-1.45, 1.45), ylim=(-1.0, 1.1))
+plt.show()
+```
+
+おおまかに、3種類の反応があることがわかります。ST → S（KaiA なし）のように、周期にも振幅にも負に効く反応。S → ST のように、どちらにも正に効く反応。そして KaiA による U → T のように、周期にはほとんど効かず（`{python} f"{C['UT_b']:+.2f}"`）、振幅には強く効く（`{python} f"{CA['UT_b']:+.2f}"`）反応です。S → ST のような周期を延ばす反応が振幅も大きくするのは、6章で見た仕組みのとおりです。周期を延ばす反応は、振動の振れ幅を大きくすることで周期を延ばしていました。
+
+周期の帳簿をつり合わせたうえで、振幅の帳簿をどう傾けるかは、温度に敏感な反応、つまり活性化エネルギーの大きい反応を、この図のどこに置くかで決まります。大きく分けて、3つのやり方があります。ただし、これは考えを整理するための分け方で、研究分野で確立した分類ではありません。実際の時計では複数のやり方が組み合わさっていてもかまいませんし、どの階層で見るかによっても見え方が変わります。たとえば KaiC の中で温度依存性が打ち消し合って ATPase が温度に鈍くなっているなら、分子の中では打ち消し合いでも、時計全体から見れば「温度に鈍い部品」です。
+
+1つ目は、どの反応も温度に鈍くしておくやり方で、7章のすべて鈍い型です。2つの帳簿はどちらもほぼゼロになり、時計は温度をほとんど感じません。
+
+2つ目は、右上の S → ST のように、周期にも振幅にも正に効く反応を温度に敏感にするやり方です。温度が上がると S → ST が速くなり、振れ幅が大きくなって周期が延びます。これが、ほかの反応の加速による周期の短縮を打ち消します。周期の補償と振幅の増加が、同じ反応から生まれるわけです。これを「結びついた型」と呼びます。7章の打ち消し合い型は、すべての反応を温度に敏感にした、結びついた型の極端な例でした。補償された振動子では、振幅が大きくなることで周期が保たれる、という見方は古くからあります [@ruoff2003]。数理モデルの解析から、遺伝子発現の振幅が温度とともに大きくならなければ周期は保てないと論じ、ラットの培養細胞で一部の時計遺伝子の振幅が大きくなることを示した研究もあります [@kurosawa2017]。KaiABC 時計でも、振幅を決めるスイッチの温度依存性が、周期の補償に効いていると報告されています [@liu2026]。
+
+3つ目は、U → T のように、周期にはほとんど効かず振幅には強く効く反応を温度に敏感にするやり方です。その活性化エネルギーを大きくしても、周期の帳簿はほとんど動かず、振幅の帳簿だけが傾きます。周期を担う反応は温度に鈍いまま、周期に効かない反応が温度を感じる。これを「役割分担型」と呼びます。この考え方にも先例があります。François らは、温度が式の中の少数の項にだけ入り、残りの部分は温度に依存しない振動子のモデルを考えました。このような時計では、温度が変わってもリミットサイクルは拡大・縮小するだけで、位相応答曲線の形も温度によりません [@francois2012]。Kidd らはこれを発展させて、周期を決める過程のひとつひとつがそれぞれ温度補償されていて、温度を感じるのは時計につながった専用の経路だ、という「経路モデル」を提案しています [@kidd2015]。
+
+結びついた型と役割分担型を、それぞれ1つの反応の活性化エネルギーを変えながら作ってみます。結びついた型では、すべて鈍い型をもとに S → ST の活性化エネルギーを大きくし、周期の帳簿は ST → S（KaiA なし）の活性化エネルギーでつり合わせます。温度に敏感なのは、この2つの反応だけです。役割分担型では、U → T の活性化エネルギーを大きくし、いつもどおり S → ST でつり合わせます。
+
+```{python}
+#| label: families
+def coupled_E(E_sd, E_base=10.0):
+    """S→ST の活性化エネルギーを E_sd にし、ST→S（KaiA なし）で 30 °C の周期の帳簿をつり合わせる"""
+    E = {n: E_base for n in RATE_NAMES}
+    E["SD_b"] = E_sd
+    E["DS_f"] = -sum(C[n] * E[n] for n in RATE_NAMES if n != "DS_f") / C["DS_f"]
+    return E
+
+fam_C = [20.0, 35.0, 50.0, 70.0]      # S→ST（20 kJ/mol はすべて鈍い型とほぼ同じ）
+fam_R = [10.0, 40.0, 70.0, 100.0]     # U→T（10 kJ/mol はすべて鈍い型そのもの）
+E_fams = [coupled_E(e) for e in fam_C] + [balance_E(10.0, e) for e in fam_R]
+temps_f = np.arange(0.0, 50.01, 0.5)
+per_f, amp_f = period_amp([at_temperature(p0, T, E) for E in E_fams for T in temps_f], t_end=2000, t_skip=1300)
+per_f = per_f.reshape(len(E_fams), -1)
+amp_f = amp_f.reshape(len(E_fams), -1)
+i30f = np.argmin(abs(temps_f - 30))
+stop_f = [temps_f[np.isfinite(r)].min() for r in per_f]
+aled_f = [sum(CA[n] * E[n] for n in RATE_NAMES) for E in E_fams]
+band = (temps_f >= 25) & (temps_f <= 45)
+flat_f = max(np.nanmax(np.abs(r[band] / r[i30f] - 1)) for r in per_f)
+nC = len(fam_C)
+```
+
+```{python}
+#| label: fig-families
+#| fig-cap: "結びついた型（上、S → ST の活性化エネルギーを変えた）と役割分担型（下、U → T の活性化エネルギーを変えた）の、周期（左）と振幅（右）の温度依存性。どちらも 30 °C の値を1とした比。色が濃いほど活性化エネルギーが大きい。凡例の括弧内は振幅の帳簿。"
+#| fig-width: 10
+#| fig-height: 7
+#| code-fold: true
+#| code-summary: "図のコード"
+oranges = ["#f6c5a8", "#f19a6c", "#eb6834", "#a3401a"]
+greens = ["#a8dcc6", "#5fc29c", "#1baf7a", "#0d6e4b"]
+fig, ax = plt.subplots(2, 2, sharex=True)
+for row, (fam, cols, name, off) in enumerate(((fam_C, oranges, "S→ST", 0), (fam_R, greens, "U→T", nC))):
+    for k, (e, c) in enumerate(zip(fam, cols)):
+        j = off + k
+        lab = f"{name}：{e:.0f} kJ/mol（{aled_f[j]:.0f}）"
+        ax[row, 0].plot(temps_f, per_f[j] / per_f[j, i30f], color=c, label=lab)
+        ax[row, 1].plot(temps_f, amp_f[j] / amp_f[j, i30f], color=c, label=lab)
+    ax[row, 0].set(ylim=(0.9, 1.15), ylabel="周期（30 °C を1とした比）")
+    ax[row, 1].set(ylim=(-0.05, 2.0), ylabel="振幅（30 °C を1とした比）")
+    ax[row, 0].legend(fontsize=8, loc="upper right")
+    ax[row, 0].set_title(["結びついた型", "役割分担型"][row], fontsize=10.5, loc="left")
+for a in ax[1]:
+    a.set_xlabel("温度 (°C)")
+fig.tight_layout()
+plt.show()
+```
+
+どちらの型でも、周期は 25〜45 °C でほとんど変わらず（30 °C の値からのずれは最大 `{python} f"{flat_f * 100:.1f}"`%）、変わるのは振幅です（@fig-families）。温度に敏感な反応の活性化エネルギーを上げるほど、振幅の帳簿は大きく傾き、低温で振動が止まる温度も上がっていきます。結びついた型では、止まる温度は `{python} "、".join(f"{v:.1f}" for v in stop_f[:nC])` °C、役割分担型では `{python} "、".join(f"{v:.1f}" for v in stop_f[nC:])` °C です。周期の帳簿をつり合わせたまま振幅の帳簿を傾けることは、どちらの型でもできるのです。
+
+違いは、傾け方の効率にあります。同じ 70 kJ/mol で比べると、振幅の帳簿は、結びついた型で `{python} f"{aled_f[fam_C.index(70.0)]:.0f}"` kJ/mol、役割分担型で `{python} f"{aled_f[nC + fam_R.index(70.0)]:.0f}"` kJ/mol です。結びついた型では、S → ST が振幅を大きくする効果の一部を、つり合わせに使った ST → S が打ち消してしまいます（ST → S の振幅の制御係数は `{python} f"{CA['DS_f']:+.2f}"`）。
+
+## 3つの型を実験と突き合わせる {#sec-experiment}
+
+では、どの型が実験に近いのでしょうか。照合に使う実験事実は、次の4つです。
+
+1. 試験管内のリズムは約19 °C で消え、18.6 °C 以下では検出されない [@murayama2017]。
+2. 45 °C でも安定したリズムが続き、周期は 30 °C とほとんど変わらない（同じ混合液で 23.4 時間と 23.3 時間）。45 °C は、安定したリズムが続く最高の温度だった [@yoshida2009]。
+3. 25〜35 °C での周期の Q~10~ は約1.05〜1.1 [@nakajima2005; @itomiwa2020]。
+4. 30 °C と 45 °C を半分ずつ繰り返す温度サイクルに、周期20〜28時間なら同調し、16時間と32時間では同調しない [@yoshida2009]。
+
+比べる前に、注意が3つあります。1つ目は、実験によって条件が違うことです。30 °C での周期は、タンパク質の調製によって約21時間から約26時間までばらつきます [@nakajima2005; @yoshida2009; @murayama2017]。周期の Q~10~ は KaiA の濃度によっても変わり、標準的な条件では1.05でも、KaiA を3倍ほどに増やすと1.27〜1.30になります [@itomiwa2020]。そこで、周期と振幅は 30 °C の値に対する比で比べ、細かな数値の一致よりも、型どうしの違いに注目します。
+
+2つ目は、合わせ込んだパラメータがあることです。結びついた型の S → ST と、役割分担型の U → T の活性化エネルギーは、どちらも 70 kJ/mol（反応速度の Q~10~ にして約 `{python} f"{q10_rate(70):.1f}"`）にしました。このとき、30/45 °C の温度サイクルへの同調のパターンが、どちらの型でも実験と同じになるからです。ですから、同調のパターンは型を見分ける材料にはなりません。
+
+3つ目は、45 °C での周期も、型を見分ける材料にならないことです。どの型も 30 °C で帳簿をつり合わせてあるので、45 °C でも周期はあまり変わりません。型の違いが出るのは、振動が止まる温度、振幅の温度依存性、そして正弦波の温度サイクルへの同調のしやすさです。比較には、8章と同じく 30 °C の周期を 23.1 時間に合わせたモデルを使います。
+
+```{python}
+#| label: compare
+STRATEGIES["C"] = coupled_E(70.0)
+STRATEGIES["R"] = balance_E(10.0, 70.0)
+keys = ("A", "B", "C", "R")
+iC, iR = keys.index("C"), keys.index("R")
+temps_c = np.arange(10.0, 55.01, 0.5)
+per_c, amp_c = period_amp([at_temperature(p_ref, T, STRATEGIES[k]) for k in keys for T in temps_c],
+                          t_end=2400, t_skip=1600)
+per_c = per_c.reshape(len(keys), -1)
+amp_c = amp_c.reshape(len(keys), -1)
+i30c = np.argmin(abs(temps_c - 30))
+
+# 30 °C と 45 °C を半分ずつ繰り返す温度サイクル（同調の判定を確かにするため長く積分する）
+cycle_T = [16.0, 20.0, 24.0, 28.0, 32.0]
+mem = [(k, Tp) for k in keys for Tp in cycle_T]
+Tp_arr = np.array([Tp for _, Tp in mem])
+stats_sq, _, _ = run_forced(p_ref, [[STRATEGIES[k][n] for n in RATE_NAMES] for k, _ in mem],
+                            lambda t: np.where(np.mod(t, Tp_arr) < Tp_arr / 2, 45.0, 30.0),
+                            t_end=5000, t_skip=4000)
+locked_sq = np.array([is_locked(s, Tp) for s, (_, Tp) in zip(stats_sq, mem)]).reshape(len(keys), -1)
+
+min_lock.update(sine_entrainment(("C", "R"))[0])     # 24 時間の正弦波（A と B は8章で計算済み）
+detune = abs(omega_g - 2 * np.pi / 24.0)             # 時計と温度サイクルの角振動数の差
+pred_lock = {k: 2 * detune / gamma_first_harmonic(STRATEGIES[k]) for k in keys}   # 位相応答からの予測
+for k in ("C", "R"):
+    mut[k] = mutation_test(p0, STRATEGIES[k])
+    amp_ledger[k] = sum(CA[n] * STRATEGIES[k][n] for n in RATE_NAMES)
+
+stop_c = {k: temps_c[np.isfinite(per_c[i])].min() for i, k in enumerate(keys)}
+r45_c = {k: per_c[i, np.argmin(abs(temps_c - 45))] / per_c[i, i30c] for i, k in enumerate(keys)}
+amp_at_stop = {k: amp_c[i, np.argmin(abs(temps_c - stop_c[k]))] / amp_c[i, i30c] for i, k in enumerate(keys)}
+```
+
+```{python}
+#| label: tbl-compare
+#| tbl-colwidths: [24, 15, 15, 15, 15, 16]
+#| tbl-cap: "4つの型と実験の比較（モデルは 30 °C の周期を 23.1 時間に合わせたもの）。○は同調、×は同調しない（打ち消し合い型は 45 °C では振動しないので、その○は温度変化に強制された応答）。正弦波のシミュレーションは ±1, 2, 3, 5 °C の4通りを試し、そのうち同調した最小の値。変異体の欄は、7章と同じ20通りの変異体での $|\\ln Q_{10}|$ の中央値と、25 °C か 35 °C で振動が止まった数。"
+def at_Tc(i, T):
+    return per_c[i, np.argmin(abs(temps_c - T))]
+def osc_range(i):
+    ok = temps_c[np.isfinite(per_c[i])]
+    lo = f"{temps_c[0]:.0f} 以下" if ok.min() <= temps_c[0] else f"{ok.min():.1f}"
+    hi = f"{temps_c[-1]:.0f} 以上" if ok.max() >= temps_c[-1] else f"{ok.max():.1f}"
+    return f"{lo}〜{hi}"
+rows_tbl = {
+    "振動する温度域 (°C)": [osc_range(i) for i in range(len(keys))] + ["約19〜45"],
+    "振幅の帳簿 (kJ/mol)": [f"{amp_ledger[k]:.0f}" for k in keys] + [f"約{ledger_exp:.0f}"],
+    "Q10（25〜35 °C）": [f"{at_Tc(i, 25) / at_Tc(i, 35):.3f}" for i in range(len(keys))] + ["約1.05〜1.1"],
+    "周期の比（45 °C / 30 °C）": [("—" if np.isnan(at_Tc(i, 45)) else f"{at_Tc(i, 45) / at_Tc(i, 30):.3f}") for i in range(len(keys))] + ["約1.00"],
+    "30/45 °C の温度サイクルへの同調（周期 16, 20, 24, 28, 32 h）": [" ".join("○" if x else "×" for x in locked_sq[i]) for i in range(len(keys))] + ["× ○ ○ ○ ×"],
+    "24 時間の正弦波に同調する最小の振れ幅（シミュレーション）": [f"±{min_lock[k]:.0f} °C" for k in keys] + ["—"],
+    "同じく、位相応答からの予測": [f"±{pred_lock[k]:.1f} °C" for k in keys] + ["—"],
+    "変異体（中央値／停止数）": [f"{mut[k]['med']:.3f}／{mut[k]['lost']}" for k in keys] + ["—"],
+}
+lines = ["| | " + " | ".join(NAMES[k] for k in keys) + " | 実験 |", "|:--|:--:|:--:|:--:|:--:|:--:|"]
+for label, vals in rows_tbl.items():
+    lines.append(f"| {label} | " + " | ".join(vals) + " |")
+Markdown("\n".join(lines))
+```
+
+```{python}
+#| label: fig-vs-exp
+#| fig-cap: "周期（左）と振幅（右）の温度依存性を、30 °C の値を1として比べたもの。線はモデル（30 °C の周期を 23.1 時間に合わせたもの）、点は実験。Murayama et al. (2017) の値は Fig. 2B から読み取った。"
+#| fig-width: 11
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots(1, 2)
+for i, key in enumerate(keys):
+    ax[0].plot(temps_c, per_c[i] / per_c[i, i30c], color=COLORS[key], label=NAMES[key])
+    ax[1].plot(temps_c, amp_c[i] / amp_c[i, i30c], color=COLORS[key], label=NAMES[key])
+ax[0].plot([25, 30, 35], np.array([22, 21, 20]) / 21, "s", color="#0b0b0b", ms=7, label="Nakajima et al. 2005")
+ax[0].plot([30, 45], [1.0, 23.3 / 23.4], "D", color="#0b0b0b", mfc="white", ms=7, mew=1.5, label="Yoshida et al. 2009")
+ax[0].plot(murayama[:, 0], murayama[:, 1] / murayama[-1, 1], "o", color=MUTED, ms=5, label="Murayama et al. 2017")
+ax[0].set(xlim=(10, 52), ylim=(0.85, 1.35), xlabel="温度 (°C)", ylabel="周期（30 °C を1とした比）")
+ax[0].legend(fontsize=8, loc="upper left")
+ax[1].plot(murayama[:, 0], murayama[:, 2] / murayama[-1, 2], "o", color="#0b0b0b", ms=6, label="Murayama et al. 2017")
+ax[1].set(xlim=(10, 52), ylim=(-0.05, 1.7), xlabel="温度 (°C)", ylabel="振幅（30 °C を1とした比）")
+ax[1].legend(fontsize=8, loc="upper left")
+fig.tight_layout()
+plt.show()
+```
+
+@tbl-compare と @fig-vs-exp を見ると、型の違いがいちばんはっきり出るのは、振動が止まる温度です。すべて鈍い型は低温で止まらず、打ち消し合い型は `{python} f"{stop_c['B']:.1f}"` °C、結びついた型は `{python} f"{stop_c['C']:.1f}"` °C、役割分担型は `{python} f"{stop_c['R']:.1f}"` °C で止まりました。実験の約19 °C にいちばん近いのは役割分担型ですが、それでも2 °C ほど高く、実験では 19.5〜21 °C でもリズムが見られます。もっとも、分岐点の見積もりは解析の仕方でも変わります。Murayama らのデータを、温度を下げたあとの応答から解析し直した研究では、分岐点は約21.4 °C とされています [@mihalcescu2025]。また、役割分担型と結びついた型の差は、合わせ方しだいで縮まります。9章で見たとおり、結びついた型でも S → ST を 50 kJ/mol にすれば、止まる温度は `{python} f"{stop_f[fam_C.index(50.0)]:.1f}"` °C と、役割分担型とほぼ同じになります。止まる温度だけでは、この2つの型は見分けられません。打ち消し合い型は 45 °C まで振動を保てず、30/45 °C のサイクルに周期がそろったのも、振動子が引き込まれたというより、温度の変化に揺さぶられているだけです。
+
+振幅の帳簿は、実験から見積もった約 `{python} f"{ledger_exp:.0f}"` kJ/mol にどの型も届きません。いちばん近いのは打ち消し合い型（`{python} f"{amp_ledger['B']:.0f}"` kJ/mol）で、役割分担型（`{python} f"{amp_ledger['R']:.0f}"` kJ/mol）、結びついた型（`{python} f"{amp_ledger['C']:.0f}"` kJ/mol）と続きます。この順は、止まる温度の順とは一致しません。9章で注意したとおり、このモデルでは、30 °C での振幅の帳簿から止まる温度を予測することはできないのです。振幅の形にも、共通の食い違いがあります。低温で止まる3つの型はどれも、止まる温度に近づくと、30 °C の数十%の振幅から一気に0になります（役割分担型では `{python} f"{amp_at_stop['R'] * 100:.0f}"`%、結びついた型では `{python} f"{amp_at_stop['C'] * 100:.0f}"`%）。8章で見た、KaiA を捕まえる鋭いスイッチによるものです。実験では、振幅は約19 °C に向かってなだらかに0に近づいていきました。この2つの食い違い、つまり振幅の帳簿が届かないことと、振幅が一気に0になることは、別々のものではありません。9章で見たとおり、実験の大きな振幅の帳簿は、Hopf 分岐に近づくにつれて振幅がなだらかに小さくなることの表れでした。モデルでは、KaiA を捕まえる鋭いスイッチのせいで、このなだらかな部分がほとんどありません（8章）。原因は同じなのです。
+
+温度サイクルへの同調は、9章の位相応答から予測できます。振れ幅 $\Delta T$、角振動数 $\Omega$ の温度サイクルで時計を揺さぶると、時計と温度サイクルの位相の差 $\psi$ は、1周で平均すると
+
+$$
+\frac{d\psi}{dt} = (\omega - \Omega) + \Delta T\, H(\psi)
+$$ {#eq-locking}
+
+に従います。$H(\psi)$ は $\Gamma_T$ の基本波（1周期の成分）から決まり、その振れ幅は基本波の大きさ $|\Gamma_1|$ の半分です。位相の差が一定に保たれる、つまり同調するには、右辺がゼロになる $\psi$ がなければならないので、同調できる最小の振れ幅は $\Delta T_{\min} = 2|\omega - \Omega| / |\Gamma_1|$ です。@tbl-compare のとおり、この予測は、シミュレーションの結果とよく合います。そして、振幅の帳簿は、すべて鈍い型（`{python} f"{amp_ledger['A']:.0f}"` kJ/mol）と結びついた型（`{python} f"{amp_ledger['C']:.0f}"` kJ/mol）で3倍ほど違うのに、同調のしやすさはほぼ同じです（予測で ±`{python} f"{pred_lock['A']:.1f}"` °C と ±`{python} f"{pred_lock['C']:.1f}"` °C）。同調を見るには、振幅ではなく、位相応答の帳簿が必要なのです。
+
+変異への強さは、型によって分かれました。役割分担型はすべて鈍い型と同じくらい強く（$|\ln Q_{10}|$ の中央値 `{python} f"{mut['R']['med']:.3f}"`）、結びついた型（`{python} f"{mut['C']['med']:.3f}"`）は打ち消し合い型（`{python} f"{mut['B']['med']:.3f}"`）とのあいだに入ります。結びついた型では振動が止まった変異体も `{python} f"{mut['C']['lost']}"` 個ありましたが、もともと `{python} f"{stop_c['C']:.1f}"` °C より下では振動しないので、25 °C での判定は範囲の端にあたります。ただし、変異への強さの比較には実験の値がありません。
+
+止まる温度と同調のパターンが、合わせ込んだパラメータにどう依存するかを、役割分担型で見ておきます。@tbl-param-scan は、U → T の活性化エネルギーと、温度に鈍い部分の活性化エネルギー $E_0$（ここまでは 10 kJ/mol）を変えたときの結果です。
+
+```{python}
+#| label: param-scan
+E0_scan = [5.0, 10.0, 12.5, 15.0, 20.0]
+sens_scan = [50.0, 60.0, 70.0]
+combos = [(e0, es) for e0 in E0_scan for es in sens_scan]
+temps_scan = np.concatenate([np.arange(17.0, 25.01, 0.5), [30.0, 45.0]])
+per_scan, _ = period_amp([at_temperature(p_ref, T, balance_E(e0, es)) for e0, es in combos for T in temps_scan],
+                         t_end=2400, t_skip=1600)
+per_scan = per_scan.reshape(len(combos), -1)
+n_low = len(temps_scan) - 2
+stop_scan = {c: temps_scan[:n_low][np.isfinite(r[:n_low])].min() for c, r in zip(combos, per_scan)}
+r45_scan = {c: r[-1] / r[-2] for c, r in zip(combos, per_scan)}
+
+mem_scan = [(c, Tp) for c in combos for Tp in cycle_T]
+Tp_scan = np.array([Tp for _, Tp in mem_scan])
+stats_scan, _, _ = run_forced(p_ref, [[balance_E(*c)[n] for n in RATE_NAMES] for c, _ in mem_scan],
+                              lambda t: np.where(np.mod(t, Tp_scan) < Tp_scan / 2, 45.0, 30.0),
+                              t_end=5000, t_skip=4000)
+lock_scan = {c: " ".join("○" if is_locked(st, Tp) else "×" for st, (cc, Tp) in zip(stats_scan, mem_scan) if cc == c)
+             for c in combos}
+```
+
+```{python}
+#| label: tbl-param-scan
+#| tbl-cap: "役割分担型で、温度に鈍い部分の活性化エネルギー $E_0$ と U → T の活性化エネルギーを変えたときの、振動が止まる温度と、30/45 °C の温度サイクル（周期 16, 20, 24, 28, 32 時間）への同調。実験は約19 °C と「× ○ ○ ○ ×」。右端の列は、U → T が 70 kJ/mol のときの、45 °C と 30 °C の周期の比。"
+#| tbl-colwidths: [16, 23, 23, 23, 15]
+def cell(c):
+    st = stop_scan[c]
+    st_s = f"{temps_scan[0]:.0f} °C 以下" if st <= temps_scan[0] else f"{st:.1f} °C"
+    return f"{st_s}　{lock_scan[c]}"
+lines = ["| $E_0$ (kJ/mol) | " + " | ".join(f"U → T：{es:.0f} kJ/mol" for es in sens_scan) + " | 45 °C / 30 °C |",
+         "|:--:|:--:|:--:|:--:|:--:|"]
+for e0 in E0_scan:
+    lines.append(f"| {e0:g} | " + " | ".join(cell((e0, es)) for es in sens_scan) + f" | {r45_scan[(e0, 70.0)]:.3f} |")
+Markdown("\n".join(lines))
+```
+
+$E_0$ を 10 kJ/mol のまま U → T の活性化エネルギーを下げると、止まる温度は実験に近づきますが、28時間のサイクルには同調しなくなります。28時間のサイクルへの同調は、U → T が 70 kJ/mol になってようやく現れる、ぎりぎりの結果なのです。$E_0$ も動かせば、両方を合わせることはできます。たとえば $E_0$ = 12.5 kJ/mol、U → T = 50 kJ/mol では、止まる温度は `{python} f"{stop_scan[(12.5, 50.0)]:.1f}"` °C、同調のパターンは「`{python} lock_scan[(12.5, 50.0)]`」で、どちらも実験と同じです。ただしこれは、2つの実験事実に2つのパラメータを合わせたということで、モデルの正しさを示すものではありません。
+
+$E_0$ を上げすぎると、今度は高温側で周期が延び始めます。U → T が 70 kJ/mol のとき、45 °C での周期は、$E_0$ が 15 kJ/mol までは 30 °C とほとんど変わりませんが、20 kJ/mol では 30 °C の `{python} f"{r45_scan[(20.0, 70.0)]:.3f}"` 倍になります。活性化エネルギー 15 kJ/mol は、反応速度の Q~10~ にすると約 `{python} f"{q10_rate(15):.1f}"` です。役割分担型が成り立つには、周期を担う反応が、2章で見た KaiC の ATPase（KaiA と KaiB を加えたときの Q~10~ が約1.2）と同じくらい、温度に鈍い必要があるのです [@terauchi2007]。この前提が実際の時計で成り立っているかどうかは、11章で確かめます。
+
+このほかにも、合わないところがあります。25〜35 °C の Q~10~ は、打ち消し合い型を除いて1.00に近く、実験の1.05〜1.1より補償が効きすぎています。30 °C で帳簿をちょうどゼロにつり合わせたからです。実験では 45 °C より高い温度で安定したリズムが見られなくなりますが、打ち消し合い型以外のモデルは 50 °C を超えても振動を続けます。このモデルには、高温でタンパク質そのものが変化するような過程は入っていません。そしてもうひとつ、KaiA の濃度への依存性が実験と逆向きです。
+
+```{python}
+#| label: kaia-dependence
+kaia_list = [1.3, 1.45]
+per_ka, _ = period_amp([at_temperature({**p_ref, "KAIA": ka}, T, STRATEGIES["R"]) for ka in kaia_list for T in (25.0, 35.0)],
+                       t_end=2400, t_skip=1600)
+q10_ka = per_ka.reshape(len(kaia_list), 2)[:, 0] / per_ka.reshape(len(kaia_list), 2)[:, 1]
+```
+
+役割分担型で KaiA を 1.3 µM から 1.45 µM に増やすと、Q~10~ は `{python} f"{q10_ka[0]:.3f}"` から `{python} f"{q10_ka[1]:.3f}"` に下がり、補償が効きすぎる向きに動きます。実験では、KaiA を増やすと Q~10~ は上がり、補償が弱まりました [@itomiwa2020]。これは、KaiA の奪い合いで補償が起きるとする Hatakeyama と Kaneko のモデルが予言していたことでもあります [@hatakeyama2012]。Rust らのモデルでは、KaiA を増やすと周期が延びる（制御係数 `{python} f"{C_all['KAIA']:+.2f}"`）ことが関係している可能性があります。KaiA の量の効き方を詳しく取り入れた別の KaiABC モデルでは、KaiA の濃度によって Q~10~ が変わる様子が再現されています [@fu2024]。
+
+まとめると、Rust らのモデルの中では、止まる温度でも同調でも、役割分担型と結びついた型をはっきり見分けることはできませんでした。どの型も、実験の振幅のなだらかな消え方には届いていません。周期の補償だけでなく、振幅や位相応答まで見ても、モデルの中の設計図を実験から1つに決めることは難しいのです。そして、ここまでの活性化エネルギーは、すべて私たちが決めたものでした。
+
+## 測定値で帳簿をつける {#sec-measured}
+
+実際の KaiABC の反応の活性化エネルギーは、どうなっているのでしょうか。Liu らは最近、査読前の論文で、KaiC のリン酸化と脱リン酸化の各段階の速さを、20 °C と 30 °C で別々に測定データに当てはめて求めました [@liu2026]。その補足資料の表には、Rust らのモデルとほぼ同じ形の反応ごとに、30 °C と 20 °C での速さの比が載っています。
+
+Liu らの「KaiA 依存」の速さは、@eq-kxy2 の KaiA が結合した状態の速さ $k^{\mathrm{bound}}$ に、「ベースライン」の速さは $k^{\mathrm{free}}$ にあたります。KaiA の効き方を表す定数は $K_{1/2}$ にあたります。ただし、Liu らのモデルは、Rust らのモデルを発展させた Phong らのモデル [@phong2013] をもとにしていて、基準の速さは Rust らのモデルとは少し違います。また、表には標準誤差の大きい値もあります。たとえば KaiA が結合した状態の T → ST と ST → T は、温度を上げると速さが5分の1以下になるという値で、T → ST の 30 °C での値は標準誤差のほうが大きいほどです。Liu ら自身は、リン酸化ではよく決まった2つの段階を、脱リン酸化では3つの段階を選び、合わせて5つの速さの温度依存性を自分たちのモデルに入れています。ここでもそれにならい、この5つの速さだけに温度依存性を与え、残りは温度によらないとします。$K_{1/2}$ の温度依存性は Liu らのモデルには入っていないので、別に加えて比べます。
+
+```{python}
+#| label: measured
+# Liu et al. (2026) の補足資料 Table S1：30 °C と 20 °C での速さの比（KaiA 依存の速さは、KaiA が結合した状態の速さ）
+liu_ratio = {"UT_b": 1.60, "TD_b": 0.06, "SD_b": 1.31, "US_b": 1.17, "TU_b": 1.16, "DT_b": 0.20,
+             "TU_f": 1.37, "DS_f": 2.60, "SU_f": 5.80}
+liu_ratio_K = 1.38                                            # KaiA の効き方の定数（K½）
+liu_used = ["UT_b", "US_b", "TU_f", "DS_f", "SU_f"]           # Liu らが自分たちのモデルに使った値（表で赤字）
+liu_dissoc = 3.49                                             # Table S2：KaiA による KaiB・KaiC 複合体の解離
+
+def E_from_fold(fold, T1=20.0, T2=30.0):
+    """T1 から T2 で速さが fold 倍になる反応の活性化エネルギー (kJ/mol)"""
+    return R_GAS * np.log(fold) / (1 / (T1 + 273.15) - 1 / (T2 + 273.15))
+
+E_all = {n: E_from_fold(liu_ratio[n]) for n in RATE_NAMES}
+E_liu = {n: (E_all[n] if n in liu_used else 0.0) for n in RATE_NAMES}
+H_liu = E_from_fold(liu_ratio_K)
+led_liu = sum(C[n] * E_liu[n] for n in RATE_NAMES)
+led_liu_K = led_liu + C_all["KHALF"] * H_liu
+aled_liu = sum(CA[n] * E_liu[n] for n in RATE_NAMES)
+aled_liu_K = aled_liu + CA_all["KHALF"] * H_liu
+q10_from_ledger = lambda L: np.exp(-L * 10 / (R_GAS * (T_REF + 273.15) ** 2))   # 帳簿の値から見積もる周期の Q10
+E_dissoc = E_from_fold(liu_dissoc)
+# 値の選び方を変えた帳簿：S→ST を加えた場合と、9つすべて（負の活性化エネルギーを含む）
+led_plus_SD = led_liu + C["SD_b"] * E_all["SD_b"]
+led_all9 = sum(C[n] * E_all[n] for n in RATE_NAMES)
+led_all9_K = led_all9 + C_all["KHALF"] * H_liu
+
+temps_m = np.arange(15.0, 40.01, 0.5)
+cases_m = [(E_liu, 0.0), (E_liu, H_liu)]
+per_m, amp_m = period_amp([at_temperature(p_ref, T, E, H) for E, H in cases_m for T in temps_m],
+                          t_end=4000, t_skip=2500)
+per_m = per_m.reshape(len(cases_m), -1)
+amp_m = amp_m.reshape(len(cases_m), -1)
+i30_m = np.argmin(abs(temps_m - 30))
+i25_m = np.argmin(abs(temps_m - 25))
+range_m = [(temps_m[np.isfinite(r)].min(), temps_m[np.isfinite(r)].max()) for r in per_m]
+```
+
+```{python}
+#| label: tbl-liu
+#| tbl-cap: "Liu et al. (2026) の Table S1 の値を、Rust らのモデルの反応に当てはめたもの。比は 30 °C と 20 °C の速さの比。制御係数は 30 °C での Rust らのモデルの値。○は Liu らが自分たちのモデルに使った値。"
+#| tbl-colwidths: [26, 14, 18, 14, 16, 12]
+lines = ["| 反応 | 30 °C / 20 °C | 活性化エネルギー (kJ/mol) | 制御係数 C | 寄与 C×E (kJ/mol) | 使用 |",
+         "|:--|--:|--:|--:|--:|:--:|"]
+for n in RATE_NAMES:
+    lines.append(f"| {LABELS[n]} | {liu_ratio[n]:.2f} | {E_all[n]:.0f} | {C[n]:+.2f} | {C[n] * E_all[n]:+.0f} | "
+                 f"{'○' if n in liu_used else '—'} |")
+lines.append(f"| K½（KaiA の効き方の定数） | {liu_ratio_K:.2f} | {H_liu:.0f} | {C_all['KHALF']:+.2f} | "
+             f"{C_all['KHALF'] * H_liu:+.0f} | — |")
+Markdown("\n".join(lines))
+```
+
+```{python}
+#| label: fig-measured-ledger
+#| fig-cap: "Liu らがモデルに使った5つの速さによる、周期の帳簿（左）と振幅の帳簿（右）への寄与。いちばん下は、それに加えた場合の K½ の寄与。"
+#| fig-width: 9
+#| fig-height: 3.8
+#| code-fold: true
+#| code-summary: "図のコード"
+rows_m = liu_used + ["KHALF"]
+lab_m = [LABELS[n] for n in liu_used] + ["K½（加えた場合）"]
+vals_P = [C[n] * E_liu[n] for n in liu_used] + [C_all["KHALF"] * H_liu]
+vals_A = [CA[n] * E_liu[n] for n in liu_used] + [CA_all["KHALF"] * H_liu]
+fig, axes = plt.subplots(1, 2, sharey=True)
+for ax, vals, title, tot in ((axes[0], vals_P, "周期の帳簿", led_liu), (axes[1], vals_A, "振幅の帳簿", aled_liu)):
+    colors = [ORANGE if v > 0 else BLUE for v in vals]
+    bars = ax.barh(lab_m[::-1], vals[::-1], color=colors[::-1], height=0.6)
+    bars[0].set_alpha(0.45)
+    ax.axvline(0, color=INK2, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.set_title(f"{title}（5つの合計 {tot:+.0f} kJ/mol）", fontsize=10.5, loc="left")
+    ax.set_xlabel("寄与 (kJ/mol)")
+    ax.grid(axis="y", visible=False)
+fig.tight_layout()
+plt.show()
+```
+
+なお、これらの値には議論の余地があります。KaiC のリン酸化と脱リン酸化の速さは、ほとんど温度によらないという以前の報告があるからです [@tomita2005; @nakajima2005]。Liu らは、以前の測定は時間が短く、部位ごとの修飾を区別していなかったと説明しています。S431 は T432 のあとでしか脱リン酸化されないので、その温度依存性は長い時間をかけて見て初めて現れる、というのです。ここでの入力は、まだ決着していない値だと考えておく必要があります。
+
+@tbl-liu と @fig-measured-ledger を見ると、時計の部品は、たしかに温度に敏感です。とくに目立つのは2つの脱リン酸化で、KaiA がないときの ST → S は約 `{python} f"{E_all['DS_f']:.0f}"` kJ/mol、S → U は約 `{python} f"{E_all['SU_f']:.0f}"` kJ/mol です。そして、周期の帳簿はつり合いません。ST → S は制御係数も大きい（`{python} f"{C['DS_f']:+.2f}"`）ので、これだけで帳簿に `{python} f"{C['DS_f'] * E_all['DS_f']:+.0f}"` kJ/mol が加わります。5つの合計は `{python} f"{led_liu:+.0f}"` kJ/mol、$K_{1/2}$ を加えると `{python} f"{led_liu_K:+.0f}"` kJ/mol です。この値は、どの値を入れるかで大きく変わります。S → ST（1.31倍）も加えると `{python} f"{led_plus_SD:+.0f}"` kJ/mol、活性化エネルギーが負になる T → ST と ST → T まで含めた9つすべてでは `{python} f"{led_all9:+.0f}"` kJ/mol（$K_{1/2}$ を加えると `{python} f"{led_all9_K:+.0f}"` kJ/mol）です。穴の大きさは選び方で数倍変わりますが、どの選び方でも帳簿は負に傾きます。Liu らと同じ5つの場合、帳簿から見積もった周期の Q~10~ は `{python} f"{q10_from_ledger(led_liu):.1f}"`〜`{python} f"{q10_from_ledger(led_liu_K):.1f}"` で、5章のすべて 50 kJ/mol の時計（約1.9）よりもさらに温度に敏感な時計になってしまいます。
+
+```{python}
+#| label: fig-measured-temp
+#| fig-cap: "Liu らの測定値を入れたモデルの、周期（左）と振幅（右）の温度依存性。どちらも 30 °C の値を1とした比。点は実験（周期は Nakajima et al. 2005、振幅は Murayama et al. 2017）。"
+#| fig-width: 10
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "図のコード"
+fig, ax = plt.subplots(1, 2)
+for k, (lab, c) in enumerate((("5つの速さ", "#5f9de0"), ("5つの速さ ＋ K½", "#1f5fae"))):
+    ax[0].plot(temps_m, per_m[k] / per_m[k, i30_m], color=c, label=lab)
+    ax[1].plot(temps_m, amp_m[k] / amp_m[k, i30_m], color=c, label=lab)
+ax[0].plot([25, 30, 35], np.array([22, 21, 20]) / 21, "s", color="#0b0b0b", ms=6, label="Nakajima et al. 2005")
+ax[0].set(xlim=(15, 40), ylim=(0.5, 4.5), xlabel="温度 (°C)", ylabel="周期（30 °C を1とした比）")
+ax[0].legend(fontsize=8.5)
+ax[1].plot(murayama[:, 0], murayama[:, 2] / murayama[-1, 2], "o", color="#0b0b0b", ms=5, label="Murayama et al. 2017")
+ax[1].set(xlim=(15, 40), ylim=(-0.05, 2.5), xlabel="温度 (°C)", ylabel="振幅（30 °C を1とした比）")
+ax[1].legend(fontsize=8.5, loc="upper right")
+fig.tight_layout()
+plt.show()
+```
+
+実際にモデルを動かすと（@fig-measured-temp）、帳簿の見積もりどおり、温度を下げると周期は大きく延びます。25 °C での周期は、30 °C の `{python} f"{per_m[0, i25_m] / per_m[0, i30_m]:.1f}"` 倍（$K_{1/2}$ を加えると `{python} f"{per_m[1, i25_m] / per_m[1, i30_m]:.1f}"` 倍）になり、振動が続くのは `{python} f"{range_m[0][0]:.1f}"`〜`{python} f"{range_m[0][1]:.1f}"` °C だけです。振幅の帳簿も `{python} f"{aled_liu:+.0f}"` kJ/mol と負で、温度を上げると振幅は小さくなっていきます。実験とは、周期も振幅も逆向きです。Liu ら自身も、自分たちのモデルで反応の速さの温度依存性だけを入れると、温度を下げたときに周期が大きく延びてしまうと報告しています。
+
+つまり、帳簿には大きな正の項が足りません。反応がどれも温度とともに速くなるなら、帳簿に正の寄与をできるのは、制御係数が正の反応、つまり「速めるとかえって周期が延びる反応」だけです（3章で注意したとおり、見かけの活性化エネルギーが負の過程や平衡定数の変化を認めれば、正の寄与は別の形でも生まれます。9つすべてを入れたときに穴が小さくなるのは、活性化エネルギーが負の T → ST が、負の制御係数とかけ合わさって正の寄与をするからです）。Rust らのモデルの中ではその代表は S → ST ですが、測られた比は1.31倍（約 `{python} f"{E_all['SD_b']:.0f}"` kJ/mol）で、加えても `{python} f"{C['SD_b'] * E_all['SD_b']:+.0f}"` kJ/mol にしかなりません。
+
+足りない項の候補を、Liu らは Rust らのモデルの外に見つけています。KaiA が KaiB・KaiC 複合体をほどく過程です。補足資料の Table S2 によれば、その速さは 20 °C から 30 °C で `{python} f"{liu_dissoc:.2f}"` 倍、活性化エネルギーにして約 `{python} f"{E_dissoc:.0f}"` kJ/mol です。そして Liu らは、この速さを、Fu らの言う「速めるとかえって周期が延びる反応」にあたると述べています [@liu2026; @fu2024]。単純に割り算すると、この過程の周期の制御係数が `{python} f"{-led_liu / E_dissoc:.1f}"`〜`{python} f"{-led_liu_K / E_dissoc:.1f}"` 程度あれば、帳簿の穴を埋められる計算になります。ただし、これはつじつまの合った見積もりではありません。新しい反応をモデルに加えれば、総和則 @eq-sum を保つように、ほかの反応の制御係数も変わるからです。たとえば新しい項が +1.2 の制御係数を持つなら、残りの反応の制御係数の和は −2.2 にならなければなりません。その分の負の制御が温度に敏感な脱リン酸化に乗れば、帳簿の穴そのものが広がります。この 1.1〜1.3 という値は、生物学的な推定値としては扱えません。言えるのは、足りない項の符号が合い、大きさも不合理ではない、というところまでです。Rust らのモデルは、KaiB・KaiC 複合体ができてほどける過程を、「S 型が KaiA を捕まえる」という瞬間的な式（@eq-freeA）にまとめているので、この項はそもそも入っていません。Liu らのモデルで、KaiA と KaiB のスイッチの温度依存性を加えたときにだけ周期が補償されたのは、帳簿の言葉でいえば、この正の項が入ったからです^[同じ Table S2 では、KaiA がないときの複合体の解離も 20 °C から 30 °C で8.8倍と、強く温度に依存する値が当てはめで得られています。これは、KaiA がないときの解離はほとんど温度によらないという Simon らの測定 [@simon2022] と食い違います。Liu ら自身も本文では、KaiA がないときの解離はほぼ温度によらないという先行研究を引用しています。当てはめで得られた個々の値には注意が必要です。]。
+
+この帳簿を手がかりにすると、次のような姿が浮かびます。温度に敏感な脱リン酸化（ST → S、S → U）が周期を縮める側に立ち、温度に敏感な KaiA と KaiB のスイッチが周期を延ばす側に立って、少数の段階どうしが打ち消し合う。そのスイッチは振幅も決めているので [@liu2026]、周期の補償と振幅の変化は、同じ仕組みから生まれていることになります。9章の言葉でいえば、少数の段階に絞った結びついた型です。ただし、この姿を強く支えているのは帳簿の計算ではありません。Liu らが、リン酸化の状態を固定した変異体（KaiC-EE）を使って、KaiA と KaiB の拮抗による履歴依存性（双安定性）を実験で示し、それを含むモデルで温度補償を再現したことです。ここでの帳簿の計算は、その結果の意味を読み解くための補助と考えるのがよいでしょう。
+
+役割分担型の前提、つまり周期を担う反応は温度に鈍いという前提も、この Rust モデルへの対応づけのもとでは、制御係数の大きい ST → S が約 `{python} f"{E_all['DS_f']:.0f}"` kJ/mol と温度に敏感なことと整合しません。ただし、制御係数は Rust らのモデルの中での値です。Rust らのモデルには ATPase がないので、周期の制御が ST → S に集まっている可能性があります。Furuike らの変異体では、ATPase の温度依存性と時計の周波数の温度依存性が一緒に動いていて [@furuike2022]、実際の時計では、周期の制御のかなりの部分が ATPase の側にあることを示唆しています。そうであれば、ST → S の制御係数はもっと小さく、帳簿の穴も小さくなります。
+
+まとめると、これはいくつもの仮定の上での推論です。ここでは Rust らのモデルの制御係数を使っています。測定は 20 °C と 30 °C の2点だけで、いくつかの値は当てはめで決まりきっていません。スイッチの項の制御係数も、Rust らのモデルでは計算できません。帳簿がつり合わない原因には、反応が欠けていることのほかに、モデルによる制御の配分の違い、反応のまとめ方の違い、推定値の不確かさも含まれます。この対応づけのもとで言えるのは、測られた部品だけでは補償を再現できないこと、足りない項の符号が Liu らの指摘するスイッチの性質と合うこと、そしてそれが、スイッチを明示的に含むモデルで確かめる理由になること、までです。それでも、帳簿という見方が、何を確かめればよいのかを具体的に指し示してくれることはわかります。
+
+## 議論：帳簿から見た実際の時計 {#sec-discussion}
+
+この記事では、周期の帳簿のつり合わせ方を、すべて鈍い型、結びついた型、役割分担型の3つに分けて考えてきました。繰り返しになりますが、これは考えを整理するための分け方で、どの階層で見るかによって、同じ仕組みが別の型に見えることもあります。それを踏まえて、最近の研究を帳簿の言葉で読んでみます。
+
+まず、周期は KaiC の ATPase が決めている、という見方です。ATPase の温度補償が崩れた変異体では、時計の周波数の温度補償も同じ向きに崩れます [@furuike2022]。ATPase の補償そのものについては、プレプリントで一つの仕組みが提案されています [@itomiwa2026]。ATPase の速さを決めているのは ADP を放出する段階で、温度が上がると KaiC は ADP が結合した状態に偏り、加水分解の加速を打ち消すといいます。分子の中では打ち消し合いですが、時計全体から見れば「周期を決める、温度に鈍い部品」です。同じプレプリントは、ATPase のリズムの振幅は温度に敏感（Q~10~ ≈ 2.1）だとも報告しています。周期を決める部品は温度に鈍く、温度への敏感さは振幅の側が担う。帳簿の言葉でいえば、これは役割分担型に近い見方です（7章で注意したとおり、すべての反応が温度に鈍い「すべて鈍い型」とは違います）。ただし、ATPase と周期の関係は単純ではありません。pH を変えると周期は約15時間から36時間まで変わるのに、ATPase の活性は15%ほどしか変わらず、温度補償は保たれます [@itomiwa2025]。また、11章で見たように、リン酸化と脱リン酸化の段階そのものは温度に敏感で、ATPase とは別に、どこかで打ち消し合っている必要があります。KaiC 単独の ATPase の補償が 4〜20 °C では崩れる（Q~10~ = 1.39）という報告もあり [@itomiwa2026]、約19 °C で時計が止まることとの関係が気になるところです。
+
+次に、振幅の変化そのものを補償の一部とみる見方で、これは結びついた型にあたります。Ruoff らは、補償された振動子は、同じ周期を保つために、温度が上がるほど大きな軌道を回らなければならないと論じ [@ruoff2003]、Kurosawa らも、振幅が温度とともに大きくならなければ周期は保てないという関係を、数理モデルから導いています [@kurosawa2017]。KaiABC 時計では、Liu らのスイッチがこれにあたり、11章の測定値の帳簿も、この型と整合する形でした。KaiC の六量体の構造と反応の結びつきを取り入れたモデルでも、温度が上がると振幅と周期が大きくなることで反応の加速を打ち消す、という仕組みが提案されています [@sasai2022]。KaiB 自身の構造変化が温度に依存し、補償に関わる可能性も論じられています [@zhang2024]。KaiB のように2つの立体構造を行き来するタンパク質では、低温で一方の構造が部分的にほどける性質がよく見られ、その温度への敏感さが環境温度への適応ではないか、という見方も示されています [@liwang2025]。
+
+役割分担型に近いのは、9章で紹介した François らや Kidd らの見方です。ショウジョウバエでは、時計のタンパク質 TIM の振動は、温度が上がると平均の量も振幅も大きくなり、振幅は 18 °C から 29 °C で約2倍になります。そこでは振動の波形も部品どうしの位相の関係も変わらず、Kidd らはこれを、温度に鈍い中心の振動子に、温度を感じる専用の経路がつながっている証拠と見ています [@kidd2015]。ただし、同じデータを解析し直して、高温ほど波形が歪むとする研究もあります [@gibo2025]。
+
+3つの見方は、互いに排他的ではありません。ATPase のように分子の中で補償された部品と、スイッチのように周期にも振幅にも効く部品が、同じ時計の中に共存していてもかまいません。それどころか、両者は同じ分子の過程の別の側面かもしれません。Ito-Miwa らのプレプリントによれば、KaiB・KaiC 複合体の中で、KaiA は KaiC の CI ドメインでの ADP から ATP への交換を速め、それが CI の ATPase を活発にして、KaiB の解離を促します [@itomiwa2026]。11章で足りない正の項の候補とした「KaiA による複合体の解離」と、ATPase のヌクレオチドの状態とが、一つの過程でつながっている可能性があるのです。アカパンカビでは時計のタンパク質の量が温度によって変わることが、温度変化で位相がずれる仕組みだとされていますし [@liu1998]、温度補償されたモデルが低温で減衰振動になり、1 °C ほどの温度サイクルにも同調することも、古くから示されていました [@ruoff1996]。
+
+気になる点もあります。Fu らは、周期を延ばす反応による補償が、分岐点から離れた領域で働きやすいことを示しました [@fu2024]。一方、試験管の時計は、9章で見たとおり、20〜30 °C のあいだも Hopf 分岐に比較的近いところで動いているように見えます。ただし、振幅の2乗が温度にほぼ比例するというだけで、Fu らの仕組みが働かないほど分岐点に近いとまでは言えませんし、Fu らの議論は、分岐点の近くでの補償を禁じるものでもありません。分岐点の近くで各反応の寄与がどう変わるのかは、このモデルでは十分に説明できていない問題です。
+
+最後に、この記事のモデルの限界を確認しておきます。Rust らのモデルには、KaiC の ATPase も、六量体の構造も、KaiB の構造変化も、Liu らの見つけた双安定性も入っていません。振幅の制御係数は、KaiA を捕まえる鋭いスイッチ（@eq-freeA）に大きく左右されるので、振幅の帳簿の値はこのモデルに固有のものです。また、この記事で温度のセンサーになった U → T も、このモデルの中での話です。生きた細胞の中では、転写と翻訳を介したフィードバックや、時計の情報を遺伝子発現に伝える出力系も、時計と結びついています [@chavan2021]。それでも、帳簿という見方は、モデルの細部によらず使えます。周期、振幅、位相応答の制御係数を求め、活性化エネルギーと掛け合わせれば、どの反応が時計のペースを守り、どの反応が温度を感じているのかを、同じ物差しで比べられるからです。
+
+## おわりに {#sec-conclusion}
+
+最後に、1章の3つの性質に立ち返ってみます。温度補償は、周期の帳簿 @eq-tc のつり合いとして書けました。低温で時計が止まることは振幅の帳簿 @eq-dlnA の傾きと、温度サイクルへの同調は位相応答の帳簿 @eq-gamma と結びついていました。振幅と位相応答の帳簿で効いてくるのは、どちらも活性化エネルギーの平均からのずれです。ですから、振幅が温度で変わるなら、温度の効果は一律の早送りではなく、活性化エネルギーがそろった時計は、どれほど温度に敏感でも温度サイクルに同調できません。
+
+この記事でいちばん伝えたかったのは、周期の温度補償だけでは、仕組みを決められないということです。周期の帳簿をゼロにするやり方はいくらでもあり、9章と10章で見たように、振幅や位相応答まで見ても、モデルの中の設計図を1つに決めるのは難しいほどでした。けれども、周期・振幅・位相応答と、反応ごとの温度依存性の測定を同じ帳簿の上に並べれば、モデルに足りない過程を絞り込み、確かめるべき仮説を具体的にすることができます。
+
+11章では、それを実際に試みました。測られた反応の温度依存性を帳簿に入れると、リン酸化と脱リン酸化の部品だけでは帳簿はつり合わず、補償は再現できませんでした。足りないのは周期を延ばす側の正の項で、その符号は、KaiA が KaiB・KaiC 複合体をほどく過程、つまり温度を感じるスイッチの性質と合っていました。これは、スイッチを明示的に含むモデルで確かめるべき仮説です。1章の問いは、部品は温度に敏感なのに、時計はなぜ鈍感なのか、というものでした。帳簿で見ると、この2つは矛盾しません。温度に敏感な部品どうしが、帳簿の上で打ち消し合えばよいのです。そしてその打ち消し合いの相手は、帳簿をつけることで、具体的に探しに行けます。
+
+試験管の中の3つのタンパク質がつくる時計は、こうした問いを、分子と数式の両方の言葉で考えられる、めったにない舞台です。この記事のコードはすべてこのページの中にあるので、測られた値を入れ替えたり、温度に敏感にする反応を取り替えたりして、自分なりの帳簿をつけてみてください。
+
+## 付録：実行環境 {.unnumbered}
+
+@fig-kaic の構造データには、Protein Data Bank のエントリ 1TF7 の mmCIF ファイル（[1TF7.cif](https://files.rcsb.org/download/1TF7.cif)、CC0）を使いました。この記事のファイルと同じフォルダに置いてから実行してください。
+
+```{python}
+#| label: environment
+import sys, scipy, matplotlib, Bio
+print(f"Python {sys.version.split()[0]} / NumPy {np.__version__} / SciPy {scipy.__version__} / "
+      f"Matplotlib {matplotlib.__version__} / Biopython {Bio.__version__}")
+```
+
+
+## 参考文献 {.unnumbered}
+
+::: {#refs}
+:::

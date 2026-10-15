@@ -28,6 +28,9 @@ jobs:
 
       - name: Render
         run: mise run render
+        env:
+          # _quarto-production.yml（Google Analytics など、本番だけの設定）も読み込む
+          QUARTO_PROFILE: production
 
       - uses: actions/upload-pages-artifact@v5
         with:

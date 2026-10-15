@@ -1,0 +1,5 @@
+# 本番（GitHub Actions での書き出し）だけに使う設定。QUARTO_PROFILE=production で読み込まれる。
+# 手元のプレビューや書き出しには入らないので、自分の閲覧は計測されない
+website:
+  # Google Analytics（GA4）の測定 ID。全ページの <head> に gtag.js のタグが入る
+  google-analytics: "G-E5FGSLXJS7"

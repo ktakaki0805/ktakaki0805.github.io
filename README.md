@@ -95,7 +95,7 @@ draft: true                           # 下書き。公開するときに消す
 ```
 mise.toml                 開発環境（Quarto・Python・uv の版）とよく使うコマンド
 pyproject.toml / uv.lock  記事の中で実行する Python のパッケージ
-_quarto.yml               サイト全体の設定（ナビ、言語、数式、引用の形式、Google Analytics など）
+_quarto.yml               サイト全体の設定（ナビ、言語、数式、引用の形式など）
 index.qmd                 トップ（記事一覧）
 tags/index.qmd            タグ一覧（URL は /tags/）
 posts/                    記事（記事ごとのフォルダに index.qmd・図・references.bib）。posts/_metadata.yml は全記事に共通の設定
@@ -104,6 +104,7 @@ _templates/               記事の見出しブロックと、一覧・タグの
 filters/                  「図1」「式 (3)」「第4節」などの表記を整える処理と、読了目安の計算
 assets/                   数式の設定、favicon、APA 形式の引用スタイル
 _quarto-drafts.yml        下書きも表示するための設定（--profile drafts）
+_quarto-production.yml    本番だけの設定（Google Analytics）。GitHub Actions が QUARTO_PROFILE=production で読み込む
 ```
 
 色や書体は `styles/blog.scss` の先頭にまとめてあります。ライトとダークの色は `:root` と `@media (prefers-color-scheme: dark)` の CSS 変数で指定しています。

@@ -95,7 +95,7 @@ draft: true                           # 下書き。公開するときに消す
 ```
 mise.toml                 開発環境（Quarto・Python・uv の版）とよく使うコマンド
 pyproject.toml / uv.lock  記事の中で実行する Python のパッケージ
-_quarto.yml               サイト全体の設定（ナビ、言語、数式、引用の形式など）
+_quarto.yml               サイト全体の設定（ナビ、言語、数式、引用の形式、Google Analytics など）
 index.qmd                 トップ（記事一覧）
 tags/index.qmd            タグ一覧（URL は /tags/）
 posts/                    記事（記事ごとのフォルダに index.qmd・図・references.bib）。posts/_metadata.yml は全記事に共通の設定

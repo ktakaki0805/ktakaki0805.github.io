@@ -14,6 +14,8 @@ website:
   site-url: "https://ktakaki0805.github.io"
   description: "ktakaki0805"
   favicon: assets/favicon.svg
+  # Google Analytics（GA4）の測定 ID。全ページの <head> に gtag.js のタグが入る
+  google-analytics: "G-E5FGSLXJS7"
   search: false
   draft-mode: gone
   navbar:

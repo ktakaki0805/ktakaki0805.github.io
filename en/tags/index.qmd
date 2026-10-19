@@ -4,12 +4,13 @@ toc: false
 number-sections: false
 listing:
   id: tags
+  # タグ名の日英対応を得るため両言語を読み込み、表示する記事はテンプレートで絞り込む。
   contents: "../../**/posts/*/index.qmd"
   sort: "date desc"
   template: ../../_templates/tag-list.ejs
   template-params:
     lang: en
   date-format: "MMMM D, YYYY"
-  fields: [title, date, categories, lang, title-en, categories-en]
+  fields: [title, date, categories, lang, categories-en]
   page-size: 1000
 ---

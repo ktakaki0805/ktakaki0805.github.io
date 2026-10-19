@@ -5,18 +5,7 @@ const plain = (s) => esc(String(s ?? '').replace(/[*_`$]/g, ''));
 const slug = (t) => 'tag-' + String(t).toLowerCase().replace(/\s+/g, '-');
 const lang = templateParams?.lang || 'ja';
 const en = lang === 'en';
-// Prefer a translation with the same posts/<slug>/index.qmd path, retaining
-// Japanese-only articles with an explicit language label.
-const postKey = (item) => item.path.replace(/^.*?\bposts\//, '');
-const translations = new Set(items.filter((item) => item.lang === 'en').map(postKey));
-const posts = items.filter((item) => !en || item.lang === 'en' || !translations.has(postKey(item)))
-  .map((item) => en && item.lang !== 'en' ? {
-    ...item,
-    title: item['title-en'] || item.title,
-    subtitle: item['subtitle-en'] || item.subtitle,
-    categories: item['categories-en'] || item.categories,
-    japaneseOnly: true,
-  } : item);
+const posts = items.filter((item) => (item.lang || 'ja') === lang);
 
 const years = {};
 for (const item of posts) {
@@ -47,9 +36,6 @@ const topTags = Object.entries(counts)
 <% } %>
 </nav>
 <div class="post-list">
-<% if (posts.some((item) => item.japaneseOnly)) { %>
-<p class="post-language-note">Posts marked “Japanese” are currently available in Japanese only.</p>
-<% } %>
 <% if (!posts.length) { %>
 <p class="post-list-empty"><%= en ? 'No posts in English yet.' : 'まだ記事はありません。' %></p>
 <% if (en) { %><p><a href="../?lang=ja">Read posts in Japanese →</a></p><% } %>
@@ -64,7 +50,6 @@ const topTags = Object.entries(counts)
 <span class="post-item-date"><%= esc(String(item.date || '').slice(5)) %></span>
 <span class="post-item-body">
 <span class="post-item-title"><%= plain(item.title) %></span>
-<% if (item.japaneseOnly) { %><span class="post-language-label">Japanese</span><% } %>
 <% if (item.subtitle) { %><span class="post-item-subtitle"><%= plain(item.subtitle) %></span><% } %>
 <% if ((item.categories || []).length) { %><span class="post-item-tags"><% for (const c of item.categories) { %><span><%= esc(c) %></span><% } %></span><% } %>
 </span>

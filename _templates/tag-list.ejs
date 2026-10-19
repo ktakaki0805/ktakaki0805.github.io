@@ -5,15 +5,7 @@ const plain = (s) => esc(String(s ?? '').replace(/[*_`$]/g, ''));
 const slug = (t) => 'tag-' + String(t).toLowerCase().replace(/\s+/g, '-');
 const lang = templateParams?.lang || 'ja';
 const en = lang === 'en';
-const postKey = (item) => item.path.replace(/^.*?\bposts\//, '');
-const translations = new Set(items.filter((item) => item.lang === 'en').map(postKey));
-const posts = items.filter((item) => !en || item.lang === 'en' || !translations.has(postKey(item)))
-  .map((item) => en && item.lang !== 'en' ? {
-    ...item,
-    title: item['title-en'] || item.title,
-    categories: item['categories-en'] || item.categories,
-    japaneseOnly: true,
-  } : item);
+const posts = items.filter((item) => (item.lang || 'ja') === lang);
 
 const groups = {};
 for (const item of posts) for (const c of (item.categories || [])) (groups[c] = groups[c] || []).push(item);
@@ -44,9 +36,6 @@ for (const item of items) {
 </ul>
 </nav>
 <div class="tag-sections">
-<% if (posts.some((item) => item.japaneseOnly)) { %>
-<p class="post-language-note">Posts marked “Japanese” are currently available in Japanese only.</p>
-<% } %>
 <% if (!tags.length) { %>
 <p class="post-list-empty"><%= en ? 'No tags in English yet.' : 'まだタグはありません。' %></p>
 <% } %>
@@ -59,7 +48,7 @@ for (const item of items) {
 <li>
 <a class="tag-item" href="<%- item.path %>">
 <span class="tag-item-date"><%= esc(item.date) %></span>
-<span class="tag-item-title"><%= plain(item.title) %><% if (item.japaneseOnly) { %> <span class="post-language-label">Japanese</span><% } %></span>
+<span class="tag-item-title"><%= plain(item.title) %></span>
 </a>
 </li>
 <% } %>

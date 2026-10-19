@@ -33,11 +33,11 @@ posts/2026-10-08/index.qmd      日本語 → /posts/2026-10-08/
 en/posts/2026-10-08/index.qmd   英語   → /en/posts/2026-10-08/
 ```
 
-英語版の一覧では英訳を優先し、未翻訳の記事は **Japanese** と明示して掲載します。英訳前でも、記事の front matter または記事と同じフォルダの `_metadata.yml` に次の項目を設定すると、英語版の一覧に英語のタイトルとタグを表示できます。
+トップページとタグ一覧には、そのページと同じ言語の記事だけを表示します。日本語版は `lang: ja`、英語版は `lang: en` の記事が対象です。英訳がない記事は英語版の一覧には表示しません。
+
+タグ一覧で言語を切り替えたときも同じタグへ移動できるよう、日本語記事の front matter または記事と同じフォルダの `_metadata.yml` に、対応する英語のタグ名を設定できます。
 
 ```yaml
-title-en: "Article title"
-subtitle-en: "Optional subtitle"
 categories-en: [Machine learning, Gaussian processes]
 ```
 

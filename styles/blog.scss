@@ -149,18 +149,6 @@ body {
   font-variant-numeric: lining-nums;
 }
 
-.post-language-note,
-.post-language-label {
-  color: var(--fg2);
-  font-family: var(--sans);
-  font-size: 0.8rem;
-}
-
-.post-language-label {
-  display: inline-block;
-  margin-inline-start: 0.5em;
-}
-
 ::selection {
   background: var(--sel);
 }

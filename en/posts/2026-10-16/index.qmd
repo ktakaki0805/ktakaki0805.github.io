@@ -1,0 +1,1811 @@
+---
+title: "Temperature compensation of circadian rhythms"
+subtitle: "Understanding temperature compensation in the cyanobacterial clock through equations and simulations"
+date: 2026-10-16
+lang: en
+categories: [Systems biology, Circadian rhythms]
+bibliography: ../../../posts/2026-10-16/references.bib
+format:
+  html:
+    toc: true
+    fig-align: center
+jupyter: python3
+execute:
+  freeze: auto
+  warning: false
+---
+
+```{python}
+#| include: false
+import numpy as np
+import matplotlib.pyplot as plt
+
+BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
+INK2, MUTED, GRID = "#52514e", "#8a8984", "#e4e3df"
+plt.rcParams.update({
+    "font.family": ["DejaVu Sans"],
+    "font.size": 10.5, "axes.unicode_minus": False,
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.edgecolor": MUTED, "axes.labelcolor": INK2,
+    "xtick.color": INK2, "ytick.color": INK2,
+    "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.8,
+    "lines.linewidth": 1.8, "legend.frameon": False,
+    "figure.dpi": 110, "savefig.dpi": 150,
+})
+```
+
+```{=html}
+<style>
+/* Keep figures within the body width (unnecessary if already set site-wide). */
+figure img, .cell-output-display img { max-width: 100%; height: auto; }
+</style>
+```
+
+## Introduction: why does temperature not throw the clock off? {#sec-intro}
+
+Our body temperature, hormone secretion, and waves of sleepiness follow cycles of approximately 24 hours. Similar rhythms of roughly one day occur in the opening and closing of plant leaves, the formation of fungal spores, and even in single-celled bacteria. They are called *circadian rhythms*, from Latin words meaning "about a day."
+
+Not every fluctuation with a period of roughly 24 hours qualifies as a circadian rhythm, however. Circadian rhythms have three recognized properties. First, they continue to oscillate with a period of about 24 hours even under constant light and temperature conditions: *self-sustained oscillation*. Organisms do not simply follow the external day–night cycle; they have an internal clock. Second, they can shift the phase of that clock to align with cycles of light and darkness or temperature: *entrainment*. Because an internal clock's period is not exactly 24 hours, it needs a small daily adjustment. Third, its period changes very little when the ambient temperature changes: *temperature compensation*.
+
+Of these three properties, temperature compensation is the most puzzling. Chemical reaction rates depend strongly on temperature: many biological reactions become about two to three times faster for a 10 °C rise. This factor is called the temperature coefficient, Q~10~. An internal clock, too, must run through a succession of chemical reactions, such as protein binding and phosphorylation. We might therefore expect it to run faster on warm days and slower on cold ones. Yet the period Q~10~ of actual circadian rhythms generally lies between about 0.8 and 1.2.^[In this article, the period Q~10~ is defined as $\tau(T)/\tau(T+10\,^\circ\mathrm{C})$. It exceeds 1 when warming shortens the period, or speeds up the clock, so its direction agrees with the Q~10~ of an ordinary chemical reaction. Some publications use the reciprocal, $\tau(T+10\,^\circ\mathrm{C})/\tau(T)$ [@fu2024], so care is needed when comparing values.] The components are temperature-sensitive, but the clock assembled from them is not.
+
+This seems somewhat at odds with the second property, entrainment. To entrain to a temperature cycle, a clock must be able to sense changes in temperature. To achieve temperature compensation, on the other hand, it must be insensitive to temperature. How can it sense temperature without being governed by it? We will return to this question at the end of the article.
+
+Cyanobacteria, also known as blue-green algae, provide a particularly useful way to approach this puzzle. They are photosynthetic bacteria. In 1993, experiments using a bioluminescent reporter showed that their gene expression exhibits a circadian rhythm with a temperature-compensated period [@kondo1993]. At the heart of this clock are three proteins: KaiA, KaiB, and KaiC.
+
+Remarkably, in 2005, mixing just these three proteins with ATP in a test tube was shown to produce an approximately daily oscillation in KaiC phosphorylation [@nakajima2005]. The periods were approximately 22, 21, and 20 hours at 25, 30, and 35 °C, respectively, giving a Q~10~ of about 1.1. A temperature-compensated clock was running without gene transcription, translation, or even a cell.
+
+If temperature compensation occurs with just three proteins in a test tube, we can investigate its mechanism through both molecules and mathematics. This article takes a systems biology approach: understanding the clock through the behavior of an interconnected reaction network, rather than through the properties of a single molecule alone. We first review how the KaiABC clock works and express the condition for temperature compensation mathematically. We then test those equations by running a clock model in Python. Looking beyond the period to how oscillation amplitude changes with temperature, we consider three ways for a temperature-compensated clock to remain sensitive to temperature, and compare them with experimental data and measured temperature dependences of individual reactions. All code in the article can be run as written to reproduce the figures.
+
+## How the KaiABC oscillator works {#sec-kai}
+
+The central player, KaiC, is a ring-shaped protein made of six subunits: a hexamer. Each subunit contains two domains, CI and CII. Together, the six subunits form two stacked rings, one of CI domains and one of CII domains, with overall dimensions of roughly 10 nm (@fig-kaic (a)) [@pattanayek2004; @egli2013]. Both domains bind ATP. The hexamer binds 12 ATP molecules in total, each nestled at an interface between neighboring subunits.
+
+KaiC can both phosphorylate and dephosphorylate itself. Phosphorylation occurs at two sites in the CII domain: serine 431 (S431) and threonine 432 (T432). A KaiC subunit can therefore occupy four states: U, with neither site phosphorylated; T, with only T432 phosphorylated; ST, with both sites phosphorylated; and S, with only S431 phosphorylated. During oscillations in vitro, these states follow a fixed order. T432 is phosphorylated first, producing T, followed by S431, producing ST. The phosphate on T432 is then removed, producing S, and finally the phosphate on S431 is removed, returning the subunit to U [@nishiwaki2007; @rust2007].
+
+```{python}
+#| label: fig-kaic
+#| fig-cap: "Structure of the KaiC hexamer (PDB 1TF7) [@pattanayek2004]. (a) Side view, showing the stacked CI (blue) and CII (orange) rings. Different shades distinguish the six subunits. The blue bands along the sides of the CII ring are linkers connecting CI to CII. (b) A section through the CII ring at the height of S431 and T432, viewed from the CII side. ATP molecules bound to CII are shown intact. The first 13 N-terminal and last 22 C-terminal residues are unresolved in this crystal structure. Rendered from atomic coordinates in Python using Biopython, NumPy, and Matplotlib."
+#| fig-width: 10.5
+#| fig-height: 5.4
+#| code-fold: true
+#| code-summary: "Figure code (rendering the PDB 1TF7 atomic coordinates)"
+from Bio.PDB import MMCIFParser
+from matplotlib.patches import Patch
+
+# --- Load the structure (PDB 1TF7) -------------------------------------------
+CI_END = 260                     # Residues 1–260: CI, including the linker to CII
+VDW = {"C": 1.7, "N": 1.55, "O": 1.52, "S": 1.8, "P": 1.8}
+records = []
+for chain in MMCIFParser(QUIET=True).get_structure("KaiC", "../../../posts/2026-10-16/1TF7.cif")[0]:
+    for res in chain:
+        het, num, _ = res.id
+        if het == " ":
+            kind = "phos" if num in (431, 432) else ("CI" if num <= CI_END else "CII")
+        elif res.get_resname() == "ATP":
+            kind = "ATP_CII" if num % 10 == 1 else "ATP_CI"   # x901: CII; x903: CI in this file
+        else:
+            continue                                         # Water molecules, etc.
+        for atom in res:
+            records.append((chain.id, kind, atom.element, num, atom.get_id(), *atom.coord))
+chain_ids = sorted({r[0] for r in records})
+chain_no = np.array([chain_ids.index(r[0]) for r in records])
+kind = np.array([r[1] for r in records])
+xyz = np.array([r[5:8] for r in records], float)
+radius = np.array([VDW.get(r[2], 1.7) for r in records]) * 1.2
+
+atom_name = np.array([r[4] for r in records])
+
+# Distance from terminal ATP phosphorus (PG) in CII to the nearest T432 side-chain oxygen (OG1)
+pg = xyz[(kind == "ATP_CII") & (atom_name == "PG")]
+og1 = xyz[(kind == "phos") & (atom_name == "OG1")]
+d_atp_t432 = np.linalg.norm(pg[:, None, :] - og1[None, :, :], axis=2).min(axis=1)
+
+center = xyz.mean(axis=0)
+axis = xyz[kind == "CII"].mean(axis=0) - xyz[kind == "CI"].mean(axis=0)   # Sixfold axis, from CI toward CII
+axis /= np.linalg.norm(axis)
+height = (xyz - center) @ axis
+
+# --- Colors -----------------------------------------------------------------
+def rgb(hexcode):
+    return np.array([int(hexcode[i:i + 2], 16) for i in (1, 3, 5)]) / 255
+PALETTE = {"CI": ("#a9c8ee", "#7ea9df"), "CII": ("#f6c7a8", "#eca07a"),
+           "ATP": "#f2c230", "phos": "#c2255c"}
+colors = np.zeros((len(records), 3)); group = np.zeros(len(records), int)
+for i, (k, c) in enumerate(zip(kind, chain_no)):
+    if k in ("CI", "CII"):
+        colors[i] = rgb(PALETTE[k][c % 2]); group[i] = 10 * c + (1 if k == "CI" else 2)   # Alternate subunit shades
+    elif k == "phos":
+        colors[i] = rgb(PALETTE["phos"]); group[i] = 10 * c + 3
+    else:
+        colors[i] = rgb(PALETTE["ATP"]); group[i] = 100 + 10 * c + (1 if k == "ATP_CII" else 3)
+
+# --- Render atoms as spheres with a z-buffer, shading, and outlines ----------
+def view_matrix(view_dir, up):
+    """Rotation matrix whose rows are screen x, y, and z (toward the viewer)."""
+    z = view_dir / np.linalg.norm(view_dir)
+    y = up - np.dot(up, z) * z; y /= np.linalg.norm(y)
+    return np.vstack([np.cross(y, z), y, z])
+
+def render(mask, R, px=0.22, ss=3, fog=0.35, depth_jump=5.0, line=1):
+    p = (xyz[mask] - center) @ R.T
+    rad, col, grp = radius[mask], colors[mask], group[mask]
+    s = px / ss                                                 # Supersample, then downsample
+    lo = p[:, :2].min(0) - rad.max() - 4; hi = p[:, :2].max(0) + rad.max() + 4
+    W, H = np.ceil((hi - lo) / s).astype(int)
+    depth = np.full((H, W), -np.inf); index = np.full((H, W), -1); nz = np.zeros((H, W))
+    gx, gy = (p[:, 0] - lo[0]) / s, (hi[1] - p[:, 1]) / s
+    for i in range(len(p)):
+        r = rad[i] / s
+        xs = np.arange(max(int(gx[i] - r), 0), min(int(gx[i] + r) + 2, W))
+        ys = np.arange(max(int(gy[i] - r), 0), min(int(gy[i] + r) + 2, H))
+        d2 = (xs[None, :] + 0.5 - gx[i]) ** 2 + (ys[:, None] + 0.5 - gy[i]) ** 2
+        cap = np.sqrt(np.clip(r * r - d2, 0, None))
+        zz = p[i, 2] + cap * s
+        win = (slice(ys[0], ys[-1] + 1), slice(xs[0], xs[-1] + 1))
+        upd = (d2 < r * r) & (zz > depth[win])
+        depth[win][upd] = zz[upd]; index[win][upd] = i; nz[win][upd] = (cap / r)[upd]
+    hit = index >= 0
+    img = np.ones((H, W, 3))
+    shade_ = col[index.clip(0)] * (0.72 + 0.28 * nz)[..., None]           # Spherical shading
+    dmin, dmax = depth[hit].min(), depth[hit].max()
+    f = (fog * (dmax - depth) / (dmax - dmin)).clip(0, fog)[..., None]   # Fade distant atoms toward white
+    img[hit] = (shade_ * (1 - f) + f)[hit]
+    g = np.where(hit, grp[index.clip(0)], -1); d = np.where(hit, depth, dmin - 100)
+    edge = np.zeros((H, W), bool)
+    for sh in ((0, 1), (1, 0), (0, -1), (-1, 0)):                       # Outline component boundaries and depth steps
+        g2, d3 = np.roll(g, sh, axis=(0, 1)), np.roll(d, sh, axis=(0, 1))
+        edge |= hit & ((g2 != g) | (np.abs(d3 - d) > depth_jump)) & (d >= d3)
+    for _ in range(line):
+        edge |= np.roll(edge, 1, 0) | np.roll(edge, 1, 1)
+    img[edge & hit] = 0.15
+    img = img[:H // ss * ss, :W // ss * ss].reshape(H // ss, ss, W // ss, ss, 3).mean(axis=(1, 3))
+    return img.clip(0, 1), [lo[0], hi[0], lo[1], hi[1]]
+
+# (a) Side view, rotated 30° from the direction of subunit A
+toA = xyz[chain_no == 0].mean(axis=0) - center; toA -= np.dot(toA, axis) * axis; toA /= np.linalg.norm(toA)
+side_dir = np.cos(np.pi / 6) * toA + np.sin(np.pi / 6) * np.cross(axis, toA)
+img_a, ext_a = render(np.ones(len(records), bool), view_matrix(side_dir, axis))
+# (b) View from CII; remove material above S431/T432, retaining all CII-bound ATP
+cut = height[kind == "phos"].max() + 1.0
+img_b, ext_b = render((height <= cut) | (kind == "ATP_CII"), view_matrix(axis, toA), fog=0.45)
+
+fig, ax = plt.subplots(1, 2, figsize=(10.5, 5.4), gridspec_kw=dict(width_ratios=[1.15, 1]))
+ax[0].imshow(img_a, extent=ext_a); ax[1].imshow(img_b, extent=ext_b)
+for a in ax:
+    a.axis("off")
+ax[0].set_title("(a) Side view of the hexamer", loc="left", fontsize=10.5)
+ax[1].set_title("(b) CII section at S431/T432", loc="left", fontsize=10.5)
+x_br = ext_a[1] + 2
+for label, (y0, y1) in (("CII", (2, 50)), ("CI", (-50, -2))):
+    ax[0].plot([x_br, x_br + 3, x_br + 3, x_br], [y0, y0, y1, y1], color=INK2, lw=1)
+    ax[0].text(x_br + 5, (y0 + y1) / 2, label, va="center", fontsize=10.5)
+ax[0].plot([ext_a[0] + 4, ext_a[0] + 54], [ext_a[2] - 3] * 2, color="#0b0b0b", lw=2)
+ax[0].text(ext_a[0] + 29, ext_a[2] - 6, "5 nm", ha="center", va="top", fontsize=9)
+ax[0].set(xlim=(ext_a[0] - 2, ext_a[1] + 16), ylim=(ext_a[2] - 13, ext_a[3] + 2))
+fig.legend(handles=[Patch(color=rgb(PALETTE["CI"][0]), label="CI"), Patch(color=rgb(PALETTE["CII"][0]), label="CII"),
+                    Patch(color=rgb(PALETTE["ATP"]), label="ATP"), Patch(color=rgb(PALETTE["phos"]), label="S431/T432")],
+           loc="lower center", ncol=4, frameon=False, fontsize=9.5)
+fig.tight_layout(rect=(0, 0.06, 1, 1))
+plt.show()
+```
+
+Panel (b) of @fig-kaic shows the CII ring sliced at the height of S431 and T432 and viewed from above. The two phosphorylation sites, shown in magenta, face the subunit interfaces and lie next to ATP molecules, shown in yellow, bound to neighboring subunits. In this structure, the distance between ATP's terminal phosphorus atom and the side-chain oxygen of T432 is approximately `{python} f"{d_atp_t432.mean():.1f}"` Å. The phosphate group is thought to be transferred from ATP across the subunit interface [@egli2013].
+
+KaiA and KaiB drive this directional cycle. KaiA binds to KaiC and stimulates its autophosphorylation. While KaiA is active, KaiC progresses from U to T and then ST. As S accumulates, however, KaiB binds to S-state KaiC, and the resulting complex sequesters KaiA, preventing it from acting [@rust2007]. Without KaiA, KaiC proceeds in the dephosphorylation direction, from ST through S to U. Eventually, the decline in S releases the sequestered KaiA, and phosphorylation begins again. Phosphorylation builds up S, which then shuts down phosphorylation itself. This delayed negative feedback generates the oscillation (@fig-cycle).
+
+```{python}
+#| label: fig-cycle
+#| fig-cap: "The KaiC phosphorylation cycle and feedback through KaiA and KaiB. KaiA promotes phosphorylation along U → T → ST. S-state KaiC, together with KaiB, sequesters KaiA and stops phosphorylation."
+#| fig-width: 7
+#| fig-height: 4.6
+#| code-fold: true
+#| code-summary: "Figure code"
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch
+
+fig, ax = plt.subplots()
+ax.set(xlim=(0, 11.6), ylim=(0, 7.2), aspect="equal")
+ax.axis("off")
+
+pos = {"U": (2.2, 1.4), "T": (2.2, 4.6), "ST": (6.2, 4.6), "S": (6.2, 1.4)}
+r = 0.62
+for name, (x, y) in pos.items():
+    ax.add_patch(Circle((x, y), r, facecolor="#f3f2ee", edgecolor=MUTED, lw=1.2, zorder=3))
+    ax.text(x, y, name, ha="center", va="center", fontsize=14, zorder=4)
+
+def arrow(p, q, color=INK2, style="-|>", ls="-", rad=0.0, lw=1.6, shrink=0.0):
+    a = FancyArrowPatch(p, q, arrowstyle=style, mutation_scale=16, color=color, lw=lw,
+                        linestyle=ls, connectionstyle=f"arc3,rad={rad}",
+                        shrinkA=shrink, shrinkB=shrink, zorder=2)
+    ax.add_patch(a)
+
+def edge(a, b):  # arrow between two circles, trimmed at the rims
+    (x1, y1), (x2, y2) = pos[a], pos[b]
+    d = np.hypot(x2 - x1, y2 - y1); ux, uy = (x2 - x1) / d, (y2 - y1) / d
+    arrow((x1 + ux * r, y1 + uy * r), (x2 - ux * r, y2 - uy * r))
+
+for a, b in [("U", "T"), ("T", "ST"), ("ST", "S"), ("S", "U")]:
+    edge(a, b)
+lab = dict(fontsize=9, color=INK2, ha="center", va="center")
+ax.text(1.9, 3.0, "T432\nphosphorylation", **{**lab, "ha": "right"})
+ax.text(4.2, 3.85, "S431\nphosphorylation", **lab)
+ax.text(6.5, 3.0, "T432\ndephosphorylation", **{**lab, "ha": "left"})
+ax.text(4.2, 0.45, "S431\ndephosphorylation", **lab)
+
+def box(x, y, text, fc, ec):
+    ax.add_patch(FancyBboxPatch((x - 0.65, y - 0.32), 1.3, 0.64, boxstyle="round,pad=0.05",
+                                facecolor=fc, edgecolor=ec, lw=1.2, zorder=3))
+    ax.text(x, y, text, ha="center", va="center", fontsize=12, zorder=4)
+
+box(4.2, 6.5, "KaiA", "#dbe8f8", BLUE)
+box(9.2, 1.4, "KaiB", "#fbe1d6", ORANGE)
+arrow((3.7, 6.2), (2.35, 3.15), color=BLUE)             # KaiA -> U→T
+arrow((4.2, 6.15), (4.2, 4.75), color=BLUE)             # KaiA -> T→ST
+ax.text(2.9, 5.75, "Activation", fontsize=10, color=BLUE, ha="right")
+arrow((6.85, 1.4), (8.5, 1.4), color=ORANGE, style="-", ls="--")    # S — KaiB
+ax.text(7.7, 1.65, "Binding", fontsize=10, color=ORANGE, ha="center")
+ax.plot([9.2, 9.2, 4.95], [1.75, 6.5, 6.5], color=ORANGE, lw=1.6, ls="--", zorder=1)  # S–KaiB inhibits KaiA
+ax.plot([4.95, 4.95], [6.22, 6.78], color=ORANGE, lw=2.2, zorder=1)                       # Inhibition symbol
+ax.text(9.35, 4.3, "Sequesters KaiA\nwith KaiB", fontsize=10, color=ORANGE, ha="left", va="center")
+plt.show()
+```
+
+KaiC has another property essential to understanding temperature compensation. It is also an ATP-hydrolyzing enzyme, or ATPase, but an extraordinarily slow one. Each KaiC subunit hydrolyzes only about 15 ATP molecules per day, and this activity is itself temperature-compensated [@terauchi2007]. The left panel of @fig-atpase shows ATPase activity from 25 to 35 °C. Its Q~10~ is approximately 1.0 for KaiC alone and about 1.2 even with KaiA and KaiB present, clearly different from the dashed line representing a reaction with Q~10~ = 2. Furthermore, measurements across KaiC mutants with different periods showed that ATPase activity was proportional to the frequency of their in vivo rhythms, the reciprocal of the period (@fig-atpase, right). The faster the KaiC ATPase, the faster the clock.
+
+```{python}
+#| label: fig-atpase
+#| fig-cap: "KaiC ATPase activity. Left: temperature dependence. Right: ATPase activity versus in vivo rhythm frequency for wild type and five period mutants; parentheses give their in vivo periods. Values were read from Figs. 4 and 5 of Terauchi et al. (2007) and replotted."
+#| fig-width: 10
+#| fig-height: 3.8
+#| code-fold: true
+#| code-summary: "Figure code"
+T = [25, 30, 35]
+atp = {"KaiC alone": [15.35, 15.92, 14.75],
+       "KaiC + KaiA + KaiB": [14.52, 16.67, 17.69],
+       "KaiC-AA": [28.12, 27.14, 28.84],
+       "KaiC-DE": [10.73, 10.71, 11.47]}
+mutants = {"WT": (25, 1.00), "T42S": (28, 0.90), "S157P": (21, 1.37),
+           "F470Y": (17, 1.55), "R393C": (15, 2.13), "A251V": (46, 0.30)}
+
+fig, ax = plt.subplots(1, 2)
+for (name, v), c in zip(atp.items(), [BLUE, ORANGE, AQUA, YELLOW]):
+    ax[0].plot(T, v, "o-", color=c, ms=7, label=f"{name} (Q10 ≈ {v[2] / v[0]:.2f})")
+ax[0].plot(T, 15.35 * np.array([1, 2 ** 0.5, 2]), "--", color=MUTED, lw=1, label="If Q10 = 2")
+ax[0].set(xticks=T, ylim=(0, 46), xlabel="Temperature (°C)", ylabel="ATP hydrolysis (molecules / KaiC / day)")
+ax[0].legend(fontsize=8.2, loc="upper center", ncol=2)
+
+freq = np.array([24 / p for p, _ in mutants.values()])
+act = np.array([a for _, a in mutants.values()])
+slope = (freq @ act) / (freq @ freq)
+x = np.linspace(0, 1.8, 10)
+ax[1].plot(x, slope * x, color=MUTED, lw=1)
+ax[1].plot(freq, act, "o", color="#0b0b0b", ms=7)
+for (name, (p, a)), f in zip(mutants.items(), freq):
+    ax[1].text(f + 0.03, a - 0.08, f"{name} ({p} h)", fontsize=8.5, color=INK2)
+ax[1].set(xlim=(0, 2), ylim=(0, 2.5), xlabel="In vivo rhythm frequency (1/day)",
+          ylabel="ATPase activity / wild-type activity")
+fig.tight_layout()
+plt.show()
+```
+
+Why is this activity so slow and so insensitive to temperature? A detailed structural study of the CI domain identified two causes of the slow rate: the water molecule used for hydrolysis is held in an unfavorable position for the reaction, and ATP hydrolysis is coupled to peptide-bond isomerization with a high activation energy [@abe2015]. The same study reported that ATPase activity shortly after adding ATP to KaiC alone, within the first two hours, was temperature-dependent (Q~10~ ≈ 1.4), whereas steady-state activity after at least 24 hours was almost temperature-independent (Q~10~ ≈ 1.1). A single amino-acid substitution in KaiC can also change the period over a range from 15 to 158 hours, while temperature compensation remains largely intact in many of these mutants [@itomiwa2020].
+
+The connection between ATPase activity and period has also been tested with respect to temperature. In KaiC mutants whose ATPase activity lost temperature compensation, compensation of the phosphorylation rhythm's frequency broke down in the same direction [@furuike2022]. In three mutants with ATPase Q~10~ values elevated to 1.5–1.7, frequency Q~10~ values also rose, to 1.2–1.6. In a mutant whose ATPase instead slowed down as temperature increased (Q~10~ ≈ 0.5), frequency also decreased with temperature (Q~10~ ≈ 0.7). In addition, spontaneous dissociation of the KaiB–KaiC complex in the absence of KaiA is slow and temperature-compensated (Q~10~ ≈ 1.05) [@simon2022]. Several of the clock's components are intrinsically insensitive to temperature.
+
+These observations might suggest that the secret of temperature compensation lies entirely in a single component, KaiC. But compensation of ATPase activity does not, by itself, explain why the period of the whole clock is compensated. Many reactions within and outside KaiC remain temperature-sensitive, and we need to understand how they determine the period when connected as a network. More fundamentally, what mathematical condition does "the period is independent of temperature" impose on a system with many reactions? The next section formulates that condition.
+
+## Expressing temperature compensation mathematically {#sec-math}
+
+### Temperature dependence of reactions
+
+The temperature dependence of a chemical reaction's rate constant $k$ is often well described by the Arrhenius equation:
+
+$$
+k(T) = A \exp\left(-\frac{E}{RT}\right)
+$$ {#eq-arrhenius}
+
+Here, $T$ is absolute temperature, $R$ is the gas constant, $E$ is the activation energy, and $A$ is a constant with little temperature dependence. Think of the activation energy as the height of an energy barrier that the reaction must cross. The higher the barrier, the more strongly the reaction accelerates when temperature rises.
+
+From @eq-arrhenius, the ratio of reaction rates when temperature rises from $T$ to $T + 10$ K, namely the reaction's Q~10~, is given by
+
+$$
+\ln Q_{10} = \frac{E}{R}\left(\frac{1}{T} - \frac{1}{T+10}\right) \approx \frac{10\,E}{RT^{2}}
+$$ {#eq-q10}
+
+For example, a reaction with an activation energy of 50 kJ/mol becomes approximately 1.9 times faster when warmed from 25 to 35 °C. @fig-q10 shows the relationship between activation energy and Q~10~. A period Q~10~ close to 1 means that the clock as a whole behaves like a reaction with an activation energy close to zero.
+
+```{python}
+#| label: fig-q10
+#| fig-cap: "Activation energy versus Q~10~ from 25 to 35 °C. The yellow band marks the typical range of period Q~10~ for circadian rhythms."
+#| fig-width: 6
+#| fig-height: 3.6
+R = 8.314e-3                  # Gas constant (kJ / mol / K)
+T1, T2 = 298.15, 308.15       # 25 and 35 °C
+E = np.linspace(0, 120, 200)  # Activation energy (kJ/mol)
+Q10 = np.exp(E / R * (1 / T1 - 1 / T2))
+
+fig, ax = plt.subplots()
+ax.axhspan(0.8, 1.2, color=YELLOW, alpha=0.25, lw=0)
+ax.plot(E, Q10, color=BLUE)
+ax.plot(50, np.exp(50 / R * (1 / T1 - 1 / T2)), "o", color=ORANGE)
+ax.annotate("E = 50 kJ/mol: Q10 ≈ 1.9", (50, 1.92), (58, 1.45), color=INK2,
+            arrowprops=dict(arrowstyle="-", color=MUTED))
+ax.set(xlabel="Activation energy E (kJ/mol)", ylabel="Q10", ylim=(0.8, 5))
+plt.show()
+```
+
+### Period control coefficients
+
+The clock's period $\tau$ depends on the rate constants $k_1, k_2, \dots, k_n$ of many reactions in the network. We quantify the influence of each rate constant on the period by
+
+$$
+C_i = \frac{\partial \ln \tau}{\partial \ln k_i}
+$$ {#eq-cc}
+
+$C_i$ is the percentage change in period caused by a 1% change in the rate constant of reaction $i$, and is called a *period control coefficient*. It applies to the period an idea from metabolic control analysis, originally developed to measure how strongly individual enzymes control flux through a metabolic network [@ruoff2003]. If $C_i$ is negative, accelerating that reaction shortens the period, as we might ordinarily expect. If $C_i$ is positive, accelerating it instead lengthens the period.
+
+Control coefficients have a simple but important property. Suppose we accelerate all reaction rate constants by the same factor $\lambda$. This is equivalent to watching the clock in fast-forward. Neither the order of reactions nor the shapes of the concentration trajectories change; only the time axis shrinks by a factor of $1/\lambda$. The period therefore also scales by $1/\lambda$:
+
+$$
+\tau(\lambda k_1, \dots, \lambda k_n) = \frac{\tau(k_1, \dots, k_n)}{\lambda}
+$$
+
+Taking logarithms of both sides, differentiating with respect to $\ln\lambda$, and setting $\lambda = 1$ gives
+
+$$
+\sum_{i=1}^{n} C_i = -1
+$$ {#eq-sum}
+
+This is called the *summation theorem*. Here, "all reactions" means all rate constants whose units contain inverse time. Parameters with concentration units, such as binding dissociation constants, and protein concentrations themselves do not change when we fast-forward the system, so they are excluded from this sum.
+
+### The condition for temperature compensation
+
+We now have everything we need. When temperature changes, each rate constant changes according to @eq-arrhenius, and its effect on the period is transmitted through its control coefficient. Applying the chain rule and substituting $d\ln k_i/dT = E_i/RT^2$ gives
+
+$$
+\frac{d \ln \tau}{d T} = \sum_{i} \frac{\partial \ln \tau}{\partial \ln k_i}\,\frac{d \ln k_i}{d T} = \frac{1}{RT^{2}} \sum_{i} C_i E_i
+$$ {#eq-dlntau}
+
+For the period to be independent of temperature, the sum on the right must vanish:
+
+$$
+\sum_{i} C_i E_i \approx 0
+$$ {#eq-tc}
+
+This is the condition for temperature compensation [@ruoff2003; @ruoff2005]. It can be understood as a ledger: enter each reaction's effect on the period as "control coefficient × activation energy," and balance the entries so that their total is zero.
+
+What follows when we combine this ledger with the summation theorem, @eq-sum? If every reaction has the same activation energy $E$, then $\sum_i C_i E_i = E\sum_i C_i = -E$, and the period shortens with temperature just as it would for a single reaction with activation energy $E$. Network complexity alone cannot produce temperature compensation. Because activation energies are usually positive, canceling the contributions of reactions with negative control coefficients requires reactions with positive control coefficients: reactions that lengthen the period when accelerated. Their activation energies must also be sufficiently large. In a clock with many temperature-sensitive reactions, compensation thus arises from a thermal balance between reactions that shorten the period and reactions that lengthen it.
+
+This conclusion has two assumptions. First, every reaction accelerates with temperature: its activation energy is positive. If we allow temperature-dependent equilibrium constants, discussed next, or processes with negative apparent activation energies, positive entries in the ledger can arise in other ways. Second, the activation energies are appreciably greater than zero. If all activation energies are nearly zero, the period is temperature-independent to begin with, even without period-lengthening reactions. The "uniformly insensitive" strategy in Section 7, and the view that KaiC ATPase activity is itself temperature-compensated, are closer to this possibility. The idea of balancing opposing effects has long been proposed as the *balance hypothesis* [@ruoff1992]. More recent work has investigated the conditions under which period-lengthening reactions arise in biochemical oscillators in general [@fu2024].
+
+### Contributions from equilibrium constants
+
+There is one more type of term to consider: processes such as molecular binding that are described by equilibrium constants rather than rate constants. The temperature dependence of an equilibrium constant $K$ follows the van 't Hoff equation,
+
+$$
+\frac{d \ln K}{d T} = \frac{\Delta H}{R T^{2}}
+$$
+
+where $\Delta H$ is the reaction enthalpy change. If $C_K$ is the period control coefficient for $K$, then @eq-dlntau acquires a term $C_K\,\Delta H$:
+
+$$
+\frac{d \ln \tau}{d T} = \frac{1}{RT^{2}}\left(\sum_i C_i E_i + \sum_j C_{K_j} \Delta H_j\right)
+$$ {#eq-dlntau-full}
+
+Unlike activation energies, $\Delta H$ can be either positive or negative. Temperature-induced shifts in binding equilibria can therefore provide another way to balance the ledger. In the model used here, the binding parameter governing KaiA's effect enters in this way.
+
+@eq-tc tells us what temperature compensation requires. But looking at the equation alone cannot reveal which reactions shorten the period of the KaiABC clock and which lengthen it. To find out, we need to run a model of the clock.
+
+## Running a KaiABC model {#sec-model}
+
+We now turn to a mathematical model of the KaiABC clock and run it in Python. We use the model proposed by Rust and colleagues in 2007 [@rust2007]. They measured the rates of individual transitions between KaiC phosphorylation states, both with and without KaiA. Combining the resulting rate constants was sufficient to reproduce the in vitro oscillations fairly well. The model has only three variables, yet captures the essential behavior of the KaiABC clock. It does not, however, explicitly include the KaiC ATPase step. Its rate constants are effective parameters that combine multiple processes, including ATP hydrolysis. This distinction will matter when we consider the role of ATPase later.
+
+### Model equations
+
+The variables are the concentrations $T$, $D$, and $S$ of KaiC in the T, ST, and S states. We use $D$ for ST, from *doubly phosphorylated*. The U-state concentration follows by subtracting the other states from total KaiC: $U = [\mathrm{KaiC}] - T - D - S$. All transitions between the four states are written as first-order reactions:
+
+$$
+\begin{aligned}
+\frac{dT}{dt} &= k_{UT}\,U + k_{DT}\,D - (k_{TU} + k_{TD})\,T \\
+\frac{dD}{dt} &= k_{TD}\,T + k_{SD}\,S - (k_{DT} + k_{DS})\,D \\
+\frac{dS}{dt} &= k_{US}\,U + k_{DS}\,D - (k_{SU} + k_{SD})\,S
+\end{aligned}
+$$ {#eq-rust}
+
+$k_{XY}$ is the rate constant for the transition from state X to state Y. Besides the four arrows in @fig-cycle, the equations include reverse transitions, such as dephosphorylation from T to U.
+
+Feedback enters because these rate constants depend on the amount of free KaiA. As we saw in Section 2, S-state KaiC sequesters KaiA together with KaiB. The original paper assumes that each S-state KaiC monomer sequesters one KaiA dimer, or two KaiA monomers, and writes the free KaiA concentration as
+
+$$
+A = \max\{0,\ [\mathrm{KaiA}] - 2S\}
+$$ {#eq-freeA}
+
+KaiB does not appear explicitly in the equations. It is assumed to be abundant and to bind rapidly to S-state KaiC, so its effect is incorporated into @eq-freeA. Each rate constant then depends hyperbolically on the amount of free KaiA:
+
+$$
+k_{XY} = k^{0}_{XY} + k^{A}_{XY}\,\frac{A}{K_{1/2} + A}
+$$ {#eq-kxy}
+
+$k^0_{XY}$ is the rate in the absence of KaiA, $k^A_{XY}$ is the change in rate at maximal KaiA stimulation, and $K_{1/2}$ is the KaiA concentration at which its effect is half-maximal.
+
+In this article, we use a slightly rearranged version of @eq-kxy. Because $f = A/(K_{1/2} + A)$ can be interpreted as the fraction of KaiC bound to KaiA, we can write
+
+$$
+k_{XY} = (1 - f)\,k^{\mathrm{free}}_{XY} + f\,k^{\mathrm{bound}}_{XY},
+\qquad k^{\mathrm{free}}_{XY} = k^{0}_{XY},\quad k^{\mathrm{bound}}_{XY} = k^{0}_{XY} + k^{A}_{XY}
+$$ {#eq-kxy2}
+
+This is a weighted average of the rates for KaiA-free and KaiA-bound KaiC, using their respective fractions. Written this way, each rate constant describes how fast KaiC in a particular state changes, making it easier to apply the Arrhenius equation in the next section.
+
+@tbl-params lists the rate constants from the original paper's supplementary material, converted to this form. The calculated ST → S and S → U rates in the KaiA-bound state are slightly negative. Under the conditions used here, with 1.3 µM KaiA, the bound fraction never exceeds approximately 75%, so even the original model never gives a negative overall reaction rate. From the next section onward, however, we apply the Arrhenius equation to individual rate constants, which cannot be negative. We therefore set these two values to zero. This changes the period at 30 °C from approximately 20.7 to 21.4 hours.^[The original paper also sets an overall reaction rate to zero if it would otherwise become negative. That adjustment was needed only in some calculations at high KaiA concentrations.]
+
+| Transition | Without KaiA $k^{\mathrm{free}}$ (h^−1^) | With KaiA $k^{\mathrm{bound}}$ (h^−1^) |
+|:--|--:|--:|
+| U → T | 0 | 0.479 |
+| T → ST | 0 | 0.213 |
+| S → ST | 0 | 0.506 |
+| U → S | 0 | 0.053 |
+| T → U | 0.21 | 0.290 |
+| ST → T | 0 | 0.173 |
+| ST → S | 0.31 | 0 (originally −0.009) |
+| S → U | 0.11 | 0 (originally −0.023) |
+
+: Rate constants in the Rust model, converted from Table S2 of the original supplementary material to the form in @eq-kxy2. $K_{1/2}$ = 0.43 µM, KaiA = 1.3 µM, and KaiC = 3.4 µM. {#tbl-params}
+
+The table reveals the character of the model. Transitions in the phosphorylation direction—U → T, T → ST, S → ST, and U → S—occur only when KaiA is bound. Conversely, dephosphorylation through ST → S and S → U occurs only when KaiA is not bound. Whether KaiA is free to act switches the entire system between phosphorylation and dephosphorylation phases.
+
+We now implement this in code. The functions accept arrays of parameters so that many parameter sets can be simulated at once.
+
+```{python}
+#| label: model
+R_GAS = 8.314e-3                     # Gas constant (kJ / mol / K)
+KAIA, KAIC, KHALF = 1.3, 3.4, 0.43   # Concentrations (µM)
+
+# Nine nonzero rate constants (1/h): _b for KaiA-bound, _f for KaiA-free
+RATES0 = {"UT_b": 0.479077, "TD_b": 0.212923, "SD_b": 0.505692, "US_b": 0.0532308,
+          "TU_b": 0.21 + 0.0798462, "DT_b": 0.173,
+          "TU_f": 0.21, "DS_f": 0.31, "SU_f": 0.11}
+RATE_NAMES = list(RATES0)
+LABELS = {"UT_b": "U→T (KaiA)", "TD_b": "T→ST (KaiA)", "SD_b": "S→ST (KaiA)",
+          "US_b": "U→S (KaiA)", "TU_b": "T→U (KaiA)", "DT_b": "ST→T (KaiA)",
+          "TU_f": "T→U (no KaiA)", "DS_f": "ST→S (no KaiA)", "SU_f": "S→U (no KaiA)"}
+
+def base_params():
+    return {**RATES0, "KHALF": KHALF, "KAIA": KAIA, "KAIC": KAIC}
+
+def rhs(x, P):
+    """Right-hand side of eq-rust. Array x has shape (3, N) for N parameter sets."""
+    T, D, S = x
+    U = P["KAIC"] - T - D - S
+    A = np.maximum(0.0, P["KAIA"] - 2.0 * S)          # Free KaiA
+    f = A / (P["KHALF"] + A)                          # Fraction bound to KaiA
+    g = 1.0 - f
+    kUT, kTD, kSD, kUS = f * P["UT_b"], f * P["TD_b"], f * P["SD_b"], f * P["US_b"]
+    kTU = f * P["TU_b"] + g * P["TU_f"]
+    kDT = f * P["DT_b"]
+    kDS, kSU = g * P["DS_f"], g * P["SU_f"]
+    dT = kUT * U + kDT * D - (kTU + kTD) * T
+    dD = kTD * T + kSD * S - (kDT + kDS) * D
+    dS = kUS * U + kDS * D - (kSU + kSD) * S
+    return np.array([dT, dD, dS])
+```
+
+We solve the differential equations using the fourth-order Runge–Kutta method. As in the original paper, the initial concentrations are 0.68 µM T, 1.36 µM ST, and 0.34 µM S. After allowing enough time for the oscillations to settle, we measure the period from upward crossings of the mean total phosphorylated KaiC concentration, $T + D + S$. Crossing times are found by linear interpolation, and the period is the mean interval between successive crossings.
+
+```{python}
+#| label: integrator
+#| code-fold: true
+#| code-summary: "Numerical integration and period measurement"
+X0 = np.array([0.68, 1.36, 0.34])
+
+def stack(params_list):
+    """Convert a list of parameter dictionaries to a dictionary of arrays."""
+    return {k: np.array([p[k] for p in params_list], float) for k in params_list[0]}
+
+def integrate(P, t_end, dt=0.01, x0=None, record_every=10, forcing=None):
+    """Integrate N parameter sets with RK4; forcing(t) returns parameters at time t."""
+    N = np.size(P["KAIC"])
+    x = np.tile(X0.reshape(3, 1), (1, N)) if x0 is None else np.array(x0, float).reshape(3, -1)
+    ts, ys = [], []
+    for i in range(int(round(t_end / dt))):
+        t = i * dt
+        if i % record_every == 0:
+            ts.append(t); ys.append(x.copy())
+        P1, P2, P3 = (forcing(t), forcing(t + dt / 2), forcing(t + dt)) if forcing else (P, P, P)
+        k1 = rhs(x, P1); k2 = rhs(x + 0.5 * dt * k1, P2)
+        k3 = rhs(x + 0.5 * dt * k2, P2); k4 = rhs(x + dt * k3, P3)
+        x = x + dt / 6.0 * (k1 + 2 * k2 + 2 * k3 + k4)
+    return np.array(ts), np.array(ys)          # ys has shape (time, 3, N)
+
+def crossing_times(t, P):
+    """Upward crossings of the mean of P, found by linear interpolation."""
+    c = P - P.mean()
+    i = np.where((c[:-1] < 0) & (c[1:] >= 0))[0]
+    return t[i] - c[i] * (t[i + 1] - t[i]) / (c[i + 1] - c[i])
+
+def period_amp_from(t, y, t_skip):
+    """Period and amplitude (peak-to-trough T+D+S) for each parameter set; NaN and 0 if nonoscillatory."""
+    m = t >= t_skip
+    Ptot = y[m].sum(axis=1)
+    half = len(Ptot) // 2
+    per = np.full(Ptot.shape[1], np.nan)
+    amp = np.zeros(Ptot.shape[1])
+    for j in range(Ptot.shape[1]):
+        a1, a2 = np.ptp(Ptot[:half, j]), np.ptp(Ptot[half:, j])
+        if a2 < 1e-3 or a2 < 0.95 * a1:                   # No oscillation, or still decaying
+            continue
+        d = np.diff(crossing_times(t[m], Ptot[:, j]))
+        if len(d) >= 2 and d.std() / d.mean() < 0.02:   # Count only regular oscillations
+            per[j] = d.mean()
+            amp[j] = np.ptp(Ptot[:, j])
+    return per, amp
+
+def period_amp(params_list, t_end=900.0, t_skip=500.0, dt=0.01):
+    t, y = integrate(stack(params_list), t_end, dt)
+    return period_amp_from(t, y, t_skip)
+```
+
+```{python}
+#| label: run-30C
+p0 = base_params()
+tau0 = period_amp([p0])[0][0]
+t, y = integrate(stack([p0]), 300, dt=0.01, record_every=5)
+```
+
+With the rate constants at 30 °C, the calculated period is `{python} f"{tau0:.1f}"` hours, in good agreement with the approximately 21-hour period measured by Nakajima and colleagues at that temperature [@nakajima2005]. @fig-timeseries shows the phosphorylation-state trajectories and the amount of free KaiA. The peaks occur in the order T, ST, and S, reproducing the U → T → ST → S → U sequence described in Section 2. Notice the free KaiA concentration: as S builds up, free KaiA abruptly reaches zero and remains there for a while. This is the dephosphorylation phase. Once S decreases and KaiA is released, the phosphorylation phase begins again.
+
+```{python}
+#| label: fig-timeseries
+#| fig-cap: "Time courses of KaiC phosphorylation states at 30 °C (top) and free KaiA concentration (bottom). Three cycles are shown after the oscillations have settled."
+#| fig-width: 7
+#| fig-height: 5
+#| code-fold: true
+#| code-summary: "Figure code"
+m = (t >= 200) & (t <= 272)
+tt, Y = t[m] - 200, y[m][:, :, 0]
+T_, D_, S_ = Y.T
+U_ = KAIC - T_ - D_ - S_
+fig, ax = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=[2.2, 1]))
+for arr, lab, c in [(U_, "U", MUTED), (T_, "T", BLUE), (D_, "ST", ORANGE), (S_, "S", AQUA)]:
+    ax[0].plot(tt, arr / KAIC, color=c, label=lab)
+ax[0].set_ylabel("Fraction of total KaiC")
+ax[0].legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, 1.15))
+ax[1].plot(tt, np.maximum(0, KAIA - 2 * S_), color=INK2)
+ax[1].set(xlabel="Time (h)", ylabel="Free KaiA (µM)")
+fig.tight_layout()
+plt.show()
+```
+
+The oscillation settles into the same shape regardless of its starting point. @fig-phase plots trajectories from two widely separated initial conditions, using S concentration and total phosphorylated KaiC as the axes. Both trajectories eventually move around the same closed loop. Such an isolated periodic orbit that attracts nearby trajectories is called a *limit cycle*. The description of a circadian clock as a limit cycle will underpin our discussion in Section 8 of how oscillations stop and how the clock entrains to temperature cycles.
+
+```{python}
+#| label: fig-phase
+#| fig-cap: "Trajectories starting from two initial conditions (circles). Both approach the same limit cycle. The dashed line marks complete KaiA sequestration by S-state KaiC, S = [KaiA]/2."
+#| fig-width: 5.4
+#| fig-height: 4.6
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots()
+for x0, c in [((0.05, 0.05, 0.05), BLUE), ((0.3, 2.2, 0.8), ORANGE)]:
+    t2, y2 = integrate(stack([p0]), 250, dt=0.01, x0=np.array(x0), record_every=5)
+    yy = y2[:, :, 0]
+    ax.plot(yy[:, 2], yy.sum(axis=1), color=c, lw=1.2)
+    ax.plot(yy[0, 2], yy[0].sum(), "o", color=c, ms=7)
+ax.axvline(KAIA / 2, color=MUTED, ls="--", lw=1)
+ax.set(xlabel="S-state KaiC (µM)", ylabel="Total phosphorylated KaiC, T+ST+S (µM)")
+plt.show()
+```
+
+The dashed line in @fig-phase marks the boundary at which S sequesters all available KaiA. The limit cycle crosses this boundary, switching into the dephosphorylation phase as it does so. The original supplementary material also shows that oscillations require a sufficiently small $K_{1/2}$, in the range 0.092–0.93 µM, so that changes in KaiA concentration produce a sharp, switch-like change in reaction rates [@rust2007]. Sequestration itself creates strong nonlinearity, even without assuming cooperative binding.
+
+We now have a working clock at 30 °C. Next, we change its temperature.
+
+## Introducing temperature {#sec-naive}
+
+To introduce temperature into the model, we give each of the nine rate constants in @tbl-params an Arrhenius temperature dependence using @eq-arrhenius. Taking the reference temperature $T_0$ to be 30 °C and requiring the rate constants to equal the tabulated values there gives
+
+$$
+k_i(T) = k_i(T_0)\,\exp\left[-\frac{E_i}{R}\left(\frac{1}{T} - \frac{1}{T_0}\right)\right]
+$$ {#eq-arrhenius-ref}
+
+Because $K_{1/2}$ is an equilibrium constant, we use the van 't Hoff equation when assigning its temperature dependence. Expressed relative to the reference temperature, it has the same mathematical form.
+
+```{python}
+#| label: at-temperature
+T_REF = 30.0   # Reference temperature (°C)
+
+def at_temperature(p, temp_c, E, H=0.0):
+    """Parameters at temp_c (°C). E maps rate constants to activation energies (kJ/mol);
+    H is the enthalpy change for K_1/2 (kJ/mol)."""
+    T, T0 = temp_c + 273.15, T_REF + 273.15
+    factor = lambda e: np.exp(-(e / R_GAS) * (1.0 / T - 1.0 / T0))
+    q = dict(p)
+    for n in RATE_NAMES:
+        q[n] = p[n] * factor(E[n])
+    q["KHALF"] = p["KHALF"] * factor(H)
+    return q
+```
+
+As a first, naive attempt, we assign an activation energy of 50 kJ/mol to all nine reactions.
+
+```{python}
+#| label: naive-sweep
+E_equal = {n: 50.0 for n in RATE_NAMES}
+temps = np.arange(15.0, 40.01, 2.5)
+per_eq, amp_eq = period_amp([at_temperature(p0, T, E_equal) for T in temps], t_end=1500, t_skip=900)
+tau_at = lambda T: per_eq[np.argmin(abs(temps - T))]
+q10_naive = tau_at(25) / tau_at(35)
+q10_arrhenius = np.exp(50 / R_GAS * (1 / 298.15 - 1 / 308.15))
+```
+
+@fig-naive shows the result. The period decreases monotonically with temperature, giving a Q~10~ of `{python} f"{q10_naive:.3f}"` between 25 and 35 °C. This agrees exactly with the Q~10~ of a single reaction with an activation energy of 50 kJ/mol, `{python} f"{q10_arrhenius:.3f}"`, as predicted by the summation theorem in Section 3. Scaling every rate constant by the same factor simply fast-forwards the clock, so the period must decrease by that factor. In an Arrhenius plot of the logarithm of reciprocal period against reciprocal absolute temperature, shown on the right, the slope directly recovers the 50 kJ/mol activation energy. The squares on the left are the in vitro periods measured by Nakajima and colleagues [@nakajima2005]. The real clock's period shortens only slightly as temperature rises.
+
+```{python}
+#| label: fig-naive
+#| fig-cap: "Period when every reaction has an activation energy of 50 kJ/mol. Left: period versus temperature; squares are measurements from Nakajima et al. (2005). Right: Arrhenius plot of reciprocal period."
+#| fig-width: 10
+#| fig-height: 3.8
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots(1, 2)
+ax[0].plot(temps, per_eq, "o-", color=ORANGE, ms=5, label="Model (all 50 kJ/mol)")
+ax[0].plot([25, 30, 35], [22, 21, 20], "s", color="#0b0b0b", ms=7, label="In vitro measurements")
+ax[0].set(xlabel="Temperature (°C)", ylabel="Period (h)")
+ax[0].legend()
+x = 1000 / (temps + 273.15)
+yv = np.log(1 / per_eq)
+slope, icpt = np.polyfit(x, yv, 1)
+ax[1].plot(x, yv, "o", color=ORANGE, ms=5)
+ax[1].plot(x, slope * x + icpt, color=INK2, lw=1)
+ax[1].set(xlabel="1000 / T (1/K)", ylabel="ln(1 / period)")
+ax[1].text(0.05, 0.08, f"E from slope = {-slope * R_GAS * 1000:.1f} kJ/mol",
+           transform=ax[1].transAxes, color=INK2)
+fig.tight_layout()
+plt.show()
+```
+
+As a clock, this model fails the test. Yet the failure teaches us something useful. Temperature compensation, if it occurs, must rely on differences between the reactions' activation energies, arranged so as to balance the ledger in @eq-tc. Where is there room to balance it? To answer that, we need to examine each reaction's control coefficient.
+
+## Dissecting compensation through sensitivity analysis {#sec-sensitivity}
+
+### Calculating control coefficients numerically
+
+The control coefficients in @eq-cc are easy to calculate numerically. We increase and decrease each rate constant slightly, here by ±1% on a logarithmic scale, measure the period, and estimate the derivative from the difference using a central finite difference.
+
+```{python}
+#| label: control-coeffs
+def control_coeffs(p, names, h=0.01):
+    """Estimate C = d ln(period) / d ln(parameter) by central differences."""
+    plist = []
+    for n in names:
+        for s in (+1, -1):
+            q = dict(p)
+            q[n] = p[n] * np.exp(s * h)
+            plist.append(q)
+    per, _ = period_amp(plist)
+    return {n: (np.log(per[2 * i]) - np.log(per[2 * i + 1])) / (2 * h) for i, n in enumerate(names)}
+
+C_all = control_coeffs(p0, RATE_NAMES + ["KHALF", "KAIA", "KAIC"])
+C = {n: C_all[n] for n in RATE_NAMES}
+Cv = np.array([C[n] for n in RATE_NAMES])
+C_sum = Cv.sum()
+```
+
+@fig-cc shows the results. First, the control coefficients of the nine rate constants sum to `{python} f"{C_sum:.3f}"`, confirming the summation theorem in @eq-sum numerically. The control coefficients for the equilibrium constant $K_{1/2}$ and the KaiA and KaiC concentrations are `{python} f"{C_all['KHALF']:+.2f}"`, `{python} f"{C_all['KAIA']:+.2f}"`, and `{python} f"{C_all['KAIC']:+.2f}"`, respectively. These parameters are not rate constants, so their coefficients are excluded from the sum.
+
+```{python}
+#| label: fig-cc
+#| fig-cap: "Control coefficients at 30 °C. Positive coefficients (orange) identify reactions that lengthen the period when accelerated; negative coefficients (blue) identify reactions that shorten it."
+#| fig-width: 6.6
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "Figure code"
+order = np.argsort(Cv)
+fig, ax = plt.subplots()
+ax.barh([LABELS[RATE_NAMES[i]] for i in order], Cv[order],
+        color=[ORANGE if c > 0 else BLUE for c in Cv[order]], height=0.62)
+ax.axvline(0, color=INK2, lw=0.8)
+for j, i in enumerate(order):
+    ax.text(Cv[i] + (0.04 if Cv[i] >= 0 else -0.04), j, f"{Cv[i]:+.2f}", va="center",
+            ha="left" if Cv[i] >= 0 else "right", fontsize=9, color=INK2)
+ax.set(xlabel="Control coefficient C", xlim=(-1.6, 1.4))
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+Most reactions have negative control coefficients, as intuition suggests. Dephosphorylation from ST to S without KaiA shortens the period most strongly, with a coefficient of `{python} f"{C['DS_f']:+.2f}"`. Two reactions, however, have clearly positive coefficients: KaiA-dependent phosphorylation from S to ST, `{python} f"{C['SD_b']:+.2f}"`, and dephosphorylation from ST to T, `{python} f"{C['DT_b']:+.2f}"`. The two T → U reactions are also positive, but only weakly, at no more than `{python} f"{max(C['TU_b'], C['TU_f']):+.2f}"`. In particular, accelerating S → ST lengthens the period by nearly the same proportion. In Section 3, we argued that compensation requires reactions that lengthen the period when accelerated. In this model, S → ST can play that role.
+
+### Why does S → ST lengthen the period?
+
+The S → ST reaction pushes S-state KaiC back into the ST state. As discussed in Section 2, S cooperates with KaiB to sequester KaiA and stop phosphorylation. If S → ST is fast, S accumulates more slowly, delaying KaiA sequestration. Phosphorylation continues during this delay, producing more phosphorylated KaiC. Removing those additional phosphates during the subsequent dephosphorylation phase then takes longer as well. Both phases therefore lengthen.
+
+```{python}
+#| label: sd-mechanism
+phase_rows = []
+for factor in (0.8, 1.0, 1.25):
+    q = dict(p0)
+    q["SD_b"] = p0["SD_b"] * factor
+    ts_, ys_ = integrate(stack([q]), 900, dt=0.01, record_every=1)
+    keep = ts_ >= 500
+    S_ = ys_[keep][:, 2, 0]
+    per_ = period_amp_from(ts_, ys_, 500)[0][0]
+    frac_free = np.mean(KAIA - 2 * S_ > 0)            # Fraction of time with free KaiA
+    phase_rows.append((factor, per_, frac_free * per_, (1 - frac_free) * per_))
+```
+
+```{python}
+#| label: fig-sd
+#| fig-cap: "Time spent with free KaiA (phosphorylation phase) and sequestered KaiA (dephosphorylation phase) during one cycle as the S → ST rate changes."
+#| fig-width: 7
+#| fig-height: 2.6
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots()
+for k, (fac, per_, free_, capt_) in enumerate(phase_rows):
+    ax.barh(k, free_, color=BLUE, height=0.55, label="KaiA free" if k == 0 else None)
+    ax.barh(k, capt_, left=free_, color=ORANGE, height=0.55, label="KaiA sequestered" if k == 0 else None)
+    ax.text(per_ + 0.3, k, f"Period {per_:.1f} h", va="center", fontsize=9, color=INK2)
+ax.set_yticks(range(len(phase_rows)), [f"S→ST × {fac}" for fac, *_ in phase_rows])
+ax.set(xlabel="Time (h)", xlim=(0, 33))
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.16), ncol=2, fontsize=9)
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+@fig-sd illustrates this. Increasing the S → ST rate by a factor of 1.25 extends the time with free KaiA from `{python} f"{phase_rows[1][2]:.1f}"` to `{python} f"{phase_rows[2][2]:.1f}"` hours, and the time with sequestered KaiA from `{python} f"{phase_rows[1][3]:.1f}"` to `{python} f"{phase_rows[2][3]:.1f}"` hours. The seemingly paradoxical slowing of the clock when a reaction is accelerated arises because the oscillation makes a larger excursion. Studying several oscillator models, Fu and colleagues showed that period-lengthening reactions generally emerge in strongly nonlinear regimes sufficiently far from the onset of oscillation, and that they lengthen the period by increasing the size of the oscillatory excursion [@fu2024]. Our result confirms the same mechanism in a different KaiABC model.
+
+### Randomly sampling activation energies
+
+Now that we know the control coefficients, we can ask how difficult it is to balance the ledger in @eq-tc. We generate 2,000 sets of activation energies for the nine reactions, randomly sampling each energy from 20 to 100 kJ/mol. For each set, we calculate Q~10~ from the periods at 25 and 35 °C.
+
+```{python}
+#| label: random-sampling
+rng = np.random.default_rng(1)
+Es = rng.uniform(20, 100, size=(2000, len(RATE_NAMES)))
+per25, _ = period_amp([at_temperature(p0, 25.0, dict(zip(RATE_NAMES, e))) for e in Es], t_end=1000, t_skip=600)
+per35, _ = period_amp([at_temperature(p0, 35.0, dict(zip(RATE_NAMES, e))) for e in Es], t_end=1000, t_skip=600)
+Q10s = per25 / per35
+Q10_pred = np.exp(-(Es @ Cv) / R_GAS * (1 / 298.15 - 1 / 308.15))   # Prediction from the ledger
+osc = np.isfinite(Q10s)
+comp = osc & (Q10s > 0.9) & (Q10s < 1.1)
+frac_comp = comp.sum() / osc.sum()
+r_pred = np.corrcoef(np.log(Q10s[osc]), np.log(Q10_pred[osc]))[0, 1]
+```
+
+The results appear in @fig-random. Of the `{python} f"{osc.sum()}"` sets that oscillated at both temperatures, only `{python} f"{frac_comp * 100:.1f}"`% had Q~10~ values between 0.9 and 1.1. The median Q~10~ was `{python} f"{np.median(Q10s[osc]):.2f}"`: most sets sped up with temperature much like ordinary chemical reactions. The right panel compares simulated Q~10~ values with predictions from the control coefficients at 30 °C and @eq-dlntau. The correlation between their logarithms is `{python} f"{r_pred:.3f}"`. The ledger equation from Section 3 predicts the temperature dependence of this nonlinear model remarkably well.
+
+```{python}
+#| label: fig-random
+#| fig-cap: "Results for 2,000 randomly sampled activation-energy sets. Left: distribution of period Q~10~, with 0.9–1.1 shaded yellow. Right: ledger predictions versus simulations."
+#| fig-width: 10
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots(1, 2)
+bins = np.logspace(np.log10(0.3), np.log10(12), 50)
+ax[0].hist(Q10s[osc], bins=bins, color=BLUE, edgecolor="white", linewidth=0.6)
+ax[0].axvspan(0.9, 1.1, color=YELLOW, alpha=0.3, lw=0)
+ax[0].set(xscale="log", xlabel="Period Q10 (25 °C → 35 °C)", ylabel="Number of sets")
+ax[1].loglog(Q10_pred[osc], Q10s[osc], ".", color=BLUE, ms=3, alpha=0.5)
+ax[1].plot([0.2, 15], [0.2, 15], color=INK2, lw=1)
+ax[1].set(xlim=(0.2, 15), ylim=(0.2, 15), xlabel="Q10 predicted by the ledger", ylabel="Simulated Q10")
+fig.tight_layout()
+plt.show()
+```
+
+What distinguishes the compensated sets? @fig-features compares the mean activation energy of each reaction across all sets and across the compensated subset. Compensated sets have a higher activation energy for the period-lengthening S → ST reaction and a lower activation energy for ST → S without KaiA, the reaction that most strongly shortens the period. In ledger terms, they both enlarge a positive entry and reduce the largest negative entry.
+
+```{python}
+#| label: fig-features
+#| fig-cap: "Mean activation energy for each reaction across all sets (gray) and compensated sets with Q~10~ between 0.9 and 1.1 (orange). Reactions are ordered by increasing period control coefficient."
+#| fig-width: 7
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "Figure code"
+oo = np.argsort(Cv)
+yy = np.arange(len(RATE_NAMES))
+fig, ax = plt.subplots()
+for j, i in enumerate(oo):
+    ax.plot([Es[osc, i].mean(), Es[comp, i].mean()], [j, j], color=GRID, lw=3, zorder=1)
+ax.plot(Es[osc][:, oo].mean(axis=0), yy, "o", color=MUTED, ms=8, label="All sets", zorder=2)
+ax.plot(Es[comp][:, oo].mean(axis=0), yy, "o", color=ORANGE, ms=8,
+        label=f"Compensated sets (n = {comp.sum()})", zorder=3)
+ax.set_yticks(yy, [f"{LABELS[RATE_NAMES[i]]}  C = {Cv[i]:+.2f}" for i in oo])
+ax.set(xlabel="Mean activation energy (kJ/mol)")
+ax.legend(loc="lower right", fontsize=9)
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+Temperature compensation is rare when activation energies are chosen at random. Building a compensated clock requires specific relationships among those energies. How might these relationships be arranged? And do they produce a clock that works across a broad temperature range and withstands mutations?
+
+## Ways to balance the period ledger {#sec-strategies}
+
+There is more than one way to balance @eq-tc. We begin with two strategies that are opposite in character. Both are extreme constructions that express an idea in its simplest possible form, so many of their differences follow directly from how they are built. Starting with these extremes nevertheless makes it easier to see how strongly the balancing strategy changes the clock's behavior. We consider intermediate strategies in Section 9.
+
+The first strategy makes every activation energy small. Each term $C_i E_i$ is then small to begin with, so the ledger cannot become strongly unbalanced. As discussed in Section 2, KaiC ATPase activity and dissociation of the KaiB–KaiC complex are themselves temperature-compensated [@terauchi2007; @simon2022]. The idea is that if every component of the clock is insensitive to temperature, the whole clock will be too. Here, we call a clock with all activation energies except that of S → ST set to 10 kJ/mol, corresponding to a reaction-rate Q~10~ of about 1.1, the *uniformly insensitive strategy*. This is the simplest realization of that idea, however, and is not identical to the hypothesis that ATPase determines the period. That hypothesis requires compensation of the reactions controlling the period, without requiring every reaction to be temperature-insensitive. This distinction becomes important in Section 9.
+
+The second strategy gives the reactions typical activation energies of 50 kJ/mol, corresponding to Q~10~ ≈ 1.9, and makes the activation energy of the period-lengthening S → ST reaction especially large so that positive and negative entries cancel. The idea that temperature compensation results from balancing reactions with opposing thermal effects dates back to Hastings and Sweeney [@hastings1957]; Ruoff subsequently extended it to general reaction models [@ruoff1992]. We call this direct realization of the balance hypothesis the *cancellation strategy*.
+
+In both strategies, we choose the activation energy of S → ST so that the ledger $\sum_i C_i E_i$ is exactly zero at 30 °C.
+
+```{python}
+#| label: strategies
+def balance_E(E_base, E_sensor=None):
+    """Set activation energies other than S→ST to E_base; override U→T if E_sensor is given.
+    Choose S→ST to balance the period ledger at 30 °C."""
+    E = {n: E_base for n in RATE_NAMES}
+    if E_sensor is not None:
+        E["UT_b"] = E_sensor
+    E["SD_b"] = -sum(C[n] * E[n] for n in RATE_NAMES if n != "SD_b") / C["SD_b"]
+    return E
+
+STRATEGIES = {"A": balance_E(10.0), "B": balance_E(50.0)}
+NAMES = {"A": "A: Insensitive", "B": "B: Cancellation", "C": "C: Coupled", "R": "R: Division of labor"}
+COLORS = {"A": BLUE, "B": ORANGE, "C": "#a3401a", "R": AQUA}
+
+def q10_rate(E):
+    """Rate Q10 from 25 to 35 °C for a reaction with activation energy E (kJ/mol)."""
+    return np.exp(E / R_GAS * (1 / 298.15 - 1 / 308.15))
+```
+
+@fig-ledger compares the two ledgers. The S → ST activation energy is `{python} f"{STRATEGIES['A']['SD_b']:.0f}"` kJ/mol in the uniformly insensitive strategy and `{python} f"{STRATEGIES['B']['SD_b']:.0f}"` kJ/mol in the cancellation strategy. Both sums are zero, but one consists of small entries, while the other cancels large entries against one another.
+
+```{python}
+#| label: fig-ledger
+#| fig-cap: "Period ledgers for the two strategies, showing each reaction's contribution, $C_i E_i$. Both totals are zero."
+#| fig-width: 9
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, axes = plt.subplots(1, 2, sharex=True, sharey=True)
+for ax, key in zip(axes, ("A", "B")):
+    contrib = np.array([C[n] * STRATEGIES[key][n] for n in RATE_NAMES])
+    ax.barh([LABELS[n] for n in RATE_NAMES], contrib,
+            color=[ORANGE if c > 0 else BLUE for c in contrib], height=0.62)
+    ax.axvline(0, color=INK2, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.set_title(NAMES[key], fontsize=10.5, loc="left")
+    ax.set_xlabel("Contribution (kJ/mol)")
+    ax.grid(axis="y", visible=False)
+fig.tight_layout()
+plt.show()
+```
+
+### Temperature range
+
+We vary temperature from 0 to 50 °C in both strategies (@fig-strategies-temp).
+
+```{python}
+#| label: strategy-sweep
+temps_wide = np.arange(0.0, 50.01, 0.5)
+sweep = {}
+for key in ("A", "B"):
+    per, amp = period_amp([at_temperature(p0, T, STRATEGIES[key]) for T in temps_wide], t_end=2000, t_skip=1300)
+    ok = np.isfinite(per)
+    sweep[key] = dict(per=per, amp=amp, lo=temps_wide[ok].min(), hi=temps_wide[ok].max())
+amp_ratio_A = sweep["A"]["amp"][np.argmin(abs(temps_wide - 20))] / sweep["A"]["amp"][np.argmin(abs(temps_wide - 30))]
+```
+
+```{python}
+#| label: fig-strategies-temp
+#| fig-cap: "Temperature dependence of the period (left) and amplitude (right) for the two strategies. Lines end where oscillations cease (the amplitude is zero)."
+#| fig-width: 10
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots(1, 2)
+for key in ("A", "B"):
+    ax[0].plot(temps_wide, sweep[key]["per"], color=COLORS[key], label=NAMES[key])
+    ax[1].plot(temps_wide, sweep[key]["amp"], color=COLORS[key], label=NAMES[key])
+ax[0].set(ylim=(15, 40), xlabel="Temperature (°C)", ylabel="Period (h)")
+ax[0].legend(fontsize=9)
+ax[1].set(xlabel="Temperature (°C)", ylabel="Amplitude (peak-to-trough T+ST+S, µM)")
+fig.tight_layout()
+plt.show()
+```
+
+The uniformly insensitive strategy continues to oscillate with almost the same period from `{python} f"{sweep['A']['lo']:.1f}"` °C to `{python} f"{sweep['A']['hi']:.0f}"` °C, the upper limit tested. This is unsurprising, since every reaction is relatively temperature-insensitive. The cancellation strategy, in contrast, oscillates only from `{python} f"{sweep['B']['lo']:.1f}"` to `{python} f"{sweep['B']['hi']:.1f}"` °C. Its ledger was balanced only at 30 °C. Away from that temperature, the ratios between reaction rates change substantially, eventually making oscillation impossible. The amplitudes also behave differently. The uniformly insensitive strategy's amplitude changes only gradually with temperature and still retains `{python} f"{amp_ratio_A * 100:.0f}"`% of its 30 °C value at 20 °C. The cancellation strategy's amplitude falls rapidly as temperature decreases. This distinction will matter in the next section.
+
+### Robustness to mutations
+
+We also compare robustness to mutations. In real KaiC, a single amino-acid substitution can greatly change the period while leaving temperature compensation largely intact [@itomiwa2020]. We therefore construct "mutants" by multiplying each of ten parameters—the nine rate constants and $K_{1/2}$—by either 0.67 or 1.5, one at a time, and examine their Q~10~ values while leaving activation energies unchanged. We convert the periods at 28 and 32 °C to Q~10~, and also count mutants that lose oscillation at either 25 or 35 °C.
+
+```{python}
+#| label: mutation
+def mutation_test(p, E, temps=(25.0, 28.0, 32.0, 35.0)):
+    """Test Q10 and loss of oscillations in 20 mutants, scaling one parameter at a time by 0.67 or 1.5."""
+    plist = []
+    for n in RATE_NAMES + ["KHALF"]:
+        for fac in (0.67, 1.5):
+            q = dict(p)
+            q[n] = p[n] * fac
+            plist += [at_temperature(q, T, E) for T in temps]
+    per, _ = period_amp(plist, t_end=2000, t_skip=1300)
+    per = per.reshape(-1, len(temps))
+    q10_local = (per[:, 1] / per[:, 2]) ** 2.5                 # Convert the periods at 28 °C and 32 °C to Q10
+    lost = np.isnan(per[:, 0]) | np.isnan(per[:, 3])
+    return dict(q10=q10_local, lost=int(lost.sum()), n=len(per),
+                med=np.nanmedian(np.abs(np.log(q10_local))))
+
+mut = {key: mutation_test(p0, STRATEGIES[key]) for key in ("A", "B")}
+```
+
+```{python}
+#| label: fig-mutation
+#| fig-cap: "Q~10~ of mutants with one parameter multiplied by 0.67 or 1.5, calculated from the periods at 28 °C and 32 °C. The yellow band spans 0.9–1.1. The numbers at the top count mutants that stop oscillating at either 25 °C or 35 °C."
+#| fig-width: 5.6
+#| fig-height: 4
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots()
+jitter = np.random.default_rng(0)
+for k, key in enumerate(("A", "B")):
+    q = mut[key]["q10"]
+    fin = np.isfinite(q)
+    ax.scatter(k + jitter.uniform(-0.15, 0.15, fin.sum()), q[fin], s=28, color=COLORS[key],
+               edgecolor="white", lw=0.8, zorder=3)
+    ax.text(k, 1.33, f"Stopped: {mut[key]['lost']}/{mut[key]['n']}", ha="center", fontsize=9, color=INK2)
+ax.axhspan(0.9, 1.1, color=YELLOW, alpha=0.25, lw=0)
+ax.set_xticks(range(2), [NAMES[k] for k in ("A", "B")])
+ax.set(xlim=(-0.6, 1.6), ylim=(0.3, 1.42), ylabel="Mutant Q10")
+ax.grid(axis="x", visible=False)
+plt.show()
+```
+
+@fig-mutation shows the results. Under the uniformly insensitive strategy, Q~10~ stays near 1 in most mutants, with a median $|\ln Q_{10}|$ of `{python} f"{mut['A']['med']:.3f}"`, and `{python} f"{mut['A']['lost']}"` mutants lose oscillation at 25 or 35 °C. Under the cancellation strategy, Q~10~ varies much more widely, with a median $|\ln Q_{10}|$ of `{python} f"{mut['B']['med']:.3f}"`. A ledger balanced by canceling large entries can become unbalanced after a small mutation-induced change in the control coefficients. In addition, `{python} f"{mut['B']['lost']}"` mutants lose oscillation. The unmutated cancellation strategy already fails to oscillate below 24.5 °C, however, so 25 °C lies at the edge of its operating range. This count reflects both sensitivity to mutation and the narrow range of oscillation before mutation.
+
+These results apply specifically to this strategy, which balances large entries at a single temperature, 30 °C. As we will see in Section 8, this operating point is not far from the bifurcation at approximately 24 °C where oscillation stops. Fu and colleagues report that compensation through period-lengthening reactions can hold across a broad range of parameters sufficiently far from the onset of oscillation [@fu2024]. The fragility observed here must therefore reflect not only cancellation itself but also this model's proximity to a bifurcation. Compensation by cancellation is not necessarily fragile in every case. Also, our simulated mutations change only the magnitudes of rate constants, leaving activation energies unchanged. In real proteins, a single mutation can change the temperature dependence of a reaction itself [@furuike2022].
+
+A broad temperature range and robustness to mutations: so far, the uniformly insensitive strategy seems to make the better clock. But as noted in Section 1, a clock has another important property besides resisting the effects of temperature. It must also sense temperature.
+
+## A clock must sense temperature {#sec-sensing}
+
+Two experimental observations show that the clock senses temperature: it stops when cooled, and it entrains to temperature cycles.
+
+### The clock stops at low temperature
+
+Temperature compensation does not mean that the clock works at every temperature. Murayama and colleagues gradually cooled the in vitro KaiABC clock and examined its behavior in detail [@murayama2017]. As temperature fell, the amplitude decreased markedly while the period changed little, until oscillations disappeared at approximately 19 °C. Below that temperature, an external perturbation elicited oscillations that decayed with time: damped oscillations. Single-cell observations have shown that clocks in living cells also stop at low temperature through the same type of bifurcation [@mihalcescu2025]. Theory anticipated this behavior before the experiments. In the model of Hatakeyama and Kaneko, temperature compensation arises because multiple reactions compete for a limited amount of KaiA; cooling reduces the amplitude and eventually eliminates oscillation through a Hopf bifurcation [@hatakeyama2012].
+
+There are two typical ways for an oscillation to disappear. In one, the amplitude gradually goes to zero while the period remains finite: a *Hopf bifurcation*. In the other, the amplitude is retained while the period grows without bound: a *SNIC bifurcation*, or saddle-node bifurcation on an invariant circle. The experimental disappearance of amplitude at an almost constant period points to a Hopf bifurcation.
+
+For later comparison with the model, we extract periods and amplitudes at each temperature from the figure in Murayama and colleagues' paper.
+
+```{python}
+#| label: murayama-data
+#| code-fold: true
+#| code-summary: "Experimental data (values read from Fig. 2B of Murayama et al. 2017)"
+murayama = np.array([   # Temperature (°C), period (h), amplitude (peak-to-trough phosphorylated KaiC fraction)
+    [19.55, 28.58, 0.017], [20.55, 27.88, 0.039], [21.24, 27.73, 0.062], [22.13, 27.09, 0.076],
+    [23.03, 26.86, 0.095], [23.92, 26.53, 0.113], [24.82, 26.43, 0.120], [25.61, 26.34, 0.138],
+    [27.40, 27.12, 0.147], [28.30, 26.46, 0.162], [29.91, 26.37, 0.185]])
+```
+
+### A Hopf bifurcation in the model
+
+Looking back at @fig-strategies-temp in Section 7, the cancellation strategy stops oscillating on the cold side. Let us investigate how this happens.
+
+When oscillation stops, the concentrations of the phosphorylation states settle to constant values: a steady state of the differential equations. A small displacement from that state evolves as $e^{\lambda t}$, where $\lambda$ is an eigenvalue of the Jacobian at the steady state. If its real part is negative, the displacement decays and the steady state is stable. If the real part is positive, the displacement grows and oscillation emerges. A Hopf bifurcation occurs when the real parts of a pair of eigenvalues with nonzero imaginary parts change sign from negative to positive as a parameter such as temperature varies. Near the bifurcation, the emerging oscillation's period can be predicted from the imaginary part as $2\pi / \mathrm{Im}\,\lambda$.
+
+```{python}
+#| label: hopf
+from scipy.optimize import fsolve
+
+def f1(x, q):
+    return rhs(np.asarray(x).reshape(3, 1), q).ravel()
+
+def jacobian(x, q, h=1e-7):
+    J = np.zeros((3, 3))
+    f0 = f1(x, q)
+    for j in range(3):
+        xx = np.array(x, float); xx[j] += h
+        J[:, j] = (f1(xx, q) - f0) / h
+    return J
+
+def fixed_point(q):
+    x = fsolve(lambda x: f1(x, q), [0.8, 0.45, 0.57], xtol=1e-13)
+    assert np.linalg.norm(f1(x, q)) < 1e-9
+    return x
+
+E_B = STRATEGIES["B"]
+T_grid = np.round(np.arange(21.0, 30.01, 0.25), 2)
+lam = []
+for T in T_grid:
+    q = at_temperature(p0, T, E_B)
+    ev = np.linalg.eigvals(jacobian(fixed_point(q), q))
+    lam.append(ev[np.argmax(ev.real)])
+lam = np.array(lam)
+T_c = np.interp(0.0, lam.real, T_grid)          # Temperature at which the real part crosses zero
+
+# Amplitude and period just above the bifurcation (integrate longer because convergence is slow)
+T_fine = np.round(np.arange(24.30, 25.01, 0.02), 2)
+per_fine, amp_fine = period_amp([at_temperature(p0, T, E_B) for T in T_fine],
+                                t_end=8000, t_skip=7000, dt=0.02)
+```
+
+```{python}
+#| label: fig-hopf
+#| fig-cap: "The low-temperature Hopf bifurcation in the cancellation strategy. Left: real part of the steady-state eigenvalues. Middle: amplitude near the bifurcation. Right: period near the bifurcation and the period predicted from the imaginary part of the eigenvalue, $2\\pi/\\mathrm{Im}\\,\\lambda$. The dashed line marks the bifurcation."
+#| fig-width: 12
+#| fig-height: 3.6
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots(1, 3)
+ax[0].plot(T_grid, lam.real, color=ORANGE)
+ax[0].axhline(0, color=INK2, lw=0.8)
+ax[0].set(xlabel="Temperature (°C)", ylabel="Largest eigenvalue real part (1/h)")
+ax[1].plot(T_fine, amp_fine, "o", color=ORANGE, ms=4)
+ax[1].set(xlabel="Temperature (°C)", ylabel="Amplitude (µM)")
+ax[2].plot(T_fine, per_fine, "o", color=ORANGE, ms=4, label="Simulation")
+ax[2].plot(T_grid, 2 * np.pi / np.abs(lam.imag), color=INK2, lw=1, label="2π / Im λ")
+ax[2].set(xlim=(23, 26), ylim=(20, 24), xlabel="Temperature (°C)", ylabel="Period (h)")
+ax[2].legend(fontsize=9)
+for a in ax:
+    a.axvline(T_c, color=MUTED, ls="--", lw=1)
+fig.tight_layout()
+plt.show()
+```
+
+In the left panel of @fig-hopf, the real part of the eigenvalue crosses zero at `{python} f"{T_c:.2f}"` °C. As shown on the right, the period of the oscillation emerging just above the bifurcation is finite, approximately `{python} f"{np.nanmean(per_fine[:8]):.0f}"` hours, and agrees well with the prediction from the imaginary part. Oscillation in the model thus also stops through a Hopf bifurcation.
+
+The amplitude behaves differently from the experiments, however. Immediately above a Hopf bifurcation, the amplitude should grow in proportion to the square root of the distance from the bifurcation. It does so in the model, but only over a range of approximately 0.1 °C. The amplitude rises sharply after crossing the bifurcation and levels off when it reaches the boundary at which S sequesters all KaiA, the dashed line in @fig-phase. This is a consequence of the sharp sequestration switch in @eq-freeA. In the experiments, amplitude declined gradually over a range of about 10 °C. We return to this discrepancy in Section 10.
+
+The uniformly insensitive strategy, meanwhile, stops near `{python} f"{sweep['A']['lo']:.1f}"` °C, far below the experimental value of about 19 °C. When all reactions are temperature-insensitive, cooling barely changes the ratios between their rates, so oscillations are difficult to extinguish.
+
+### Compensation weakens near the bifurcation
+
+Temperature compensation itself also weakens near the bifurcation. We recalculate the control coefficients at different temperatures for the cancellation strategy (@tbl-cc-temperature).
+
+```{python}
+#| label: tbl-cc-temperature
+#| tbl-cap: "Period and control coefficients at different temperatures for the cancellation strategy. The ledger is $\\sum_i C_i E_i$ (kJ/mol). The rightmost column gives the fraction of each cycle during which all KaiA is sequestered."
+from IPython.display import Markdown
+T_tbl = (24.6, 25.0, 27.5, 30.0, 32.5, 35.0, 36.5)
+# Fraction of time with all KaiA sequestered (free KaiA = 0); integrate longer near the bifurcation, where relaxation is slow
+t_sq, y_sq = integrate(stack([at_temperature(p0, T, E_B) for T in T_tbl]), 9000, dt=0.01, record_every=2)
+S_sq = y_sq[t_sq > 7000][:, 2, :]
+seq_frac = {T: np.mean(p0["KAIA"] - 2 * S_sq[:, j] <= 0) for j, T in enumerate(T_tbl)}
+lines = ["| Temperature (°C) | Period (h) | C (S→ST) | C (ST→S, no KaiA) | ΣC | Ledger | Fraction of time with KaiA sequestered |",
+         "|--:|--:|--:|--:|--:|--:|--:|"]
+for T in T_tbl:
+    q = at_temperature(p0, T, E_B)
+    CT = control_coeffs(q, RATE_NAMES)
+    tau_T = period_amp([q])[0][0]
+    ledger = sum(CT[n] * E_B[n] for n in RATE_NAMES)
+    lines.append(f"| {T} | {tau_T:.2f} | {CT['SD_b']:+.2f} | {CT['DS_f']:+.2f} | "
+                 f"{sum(CT.values()):+.3f} | {ledger:+.1f} | {seq_frac[T] * 100:.0f}% |")
+Markdown("\n".join(lines))
+```
+
+The S → ST control coefficient, `{python} f"{C['SD_b']:+.2f}"` at 30 °C, becomes smaller near the bifurcation, tipping the ledger toward negative values. At the same time, the fraction of each cycle during which all KaiA is sequestered decreases, from `{python} f"{seq_frac[30.0] * 100:.0f}"`% at 30 °C to `{python} f"{seq_frac[24.6] * 100:.0f}"`% at 24.6 °C, as shown in the last column. In Section 6, S → ST lengthened the period by extending both the free-KaiA and sequestered-KaiA phases. As the phase in which the switch is active becomes shorter, this effect weakens. The diminished influence of period-lengthening reactions near the bifurcation agrees with Fu and colleagues' findings in general oscillator models [@fu2024]. At high temperatures, conversely, the control coefficient becomes too large, the ledger turns positive, and the period rises sharply. Balancing the ledger at 30 °C does not prevent the control coefficients themselves from changing with temperature elsewhere. The summation theorem, ΣC = −1, nevertheless holds at every temperature. Its somewhat larger deviation at 24.6 °C, very close to the bifurcation, reflects the long settling time and resulting numerical error in the period.
+
+The experiments show a similar trend. In Murayama and colleagues' data, the period increases from `{python} f"{murayama[-1, 1]:.1f}"` hours at `{python} f"{murayama[-1, 0]:.1f}"` °C to `{python} f"{murayama[0, 1]:.1f}"` hours at `{python} f"{murayama[0, 0]:.1f}"` °C, just before oscillation disappears: an increase of approximately `{python} f"{(murayama[0, 1] / murayama[-1, 1] - 1) * 100:.0f}"`%. This is small compared with the reduction of amplitude to almost zero, and differs from a SNIC bifurcation, in which the period diverges. It is nevertheless consistent with the prediction that compensation weakens near the bifurcation.
+
+### Can the clock entrain to temperature cycles?
+
+In Section 1, we noted the apparent contradiction between temperature compensation and entrainment. A clock must sense temperature to entrain to a temperature cycle. Can our two temperature-compensated strategies do so?
+
+Entrainment depends strongly on the difference between the clock's natural period and the temperature cycle's period. From this point on, we therefore scale all model rate constants down by the same factor to match the 23.1-hour period at 30 °C measured in vitro by Yoshida and colleagues [@yoshida2009]. This only rescales time and does not affect temperature dependence. We then impose a sinusoidal, 24-hour temperature cycle centered on 30 °C with an amplitude of ±ΔT and examine whether the oscillation period locks to 24 hours.
+
+```{python}
+#| label: forced
+p_ref = {**p0, **{n: p0[n] * tau0 / 23.1 for n in RATE_NAMES}}     # Set the period at 30 °C to 23.1 h
+
+def run_forced(p, E_rows, temp_fun, t_end=2400.0, t_skip=1400.0):
+    """Integrate N parameter sets with time-varying temperature; return each set's mean period and variation.
+    E_rows contains (N, 9) activation energies; temp_fun(t) returns an array of temperatures (°C) for the sets."""
+    E_rows = np.asarray(E_rows, float)
+    N = len(E_rows)
+    base = {k: np.full(N, v) for k, v in p.items()}
+    T0K = T_REF + 273.15
+    def params_at(t):
+        TK = temp_fun(t) + 273.15
+        fac = np.exp(-(E_rows / R_GAS) * (1.0 / TK[:, None] - 1.0 / T0K))
+        q = dict(base)
+        for i, n in enumerate(RATE_NAMES):
+            q[n] = p[n] * fac[:, i]
+        return q
+    t, y = integrate(base, t_end, dt=0.01, forcing=params_at, record_every=10)
+    m = t >= t_skip
+    Ptot = y[m].sum(axis=1)
+    stats = []
+    for j in range(N):
+        d = np.diff(crossing_times(t[m], Ptot[:, j]))
+        stats.append((d.mean(), d.std()) if len(d) >= 3 else (np.nan, np.nan))
+    return np.array(stats), t, y
+
+def is_locked(stat, T_cycle):
+    return abs(stat[0] - T_cycle) < 0.05 and stat[1] < 0.05
+
+def sine_entrainment(keys, dTs=(1.0, 2.0, 3.0, 5.0), t_end=3000.0, t_skip=2000.0):
+    members = [(k, dT) for k in keys for dT in dTs]
+    amp_arr = np.array([dT for _, dT in members])
+    stats, t, y = run_forced(p_ref, [[STRATEGIES[k][n] for n in RATE_NAMES] for k, _ in members],
+                             lambda t: 30.0 + amp_arr * np.sin(2 * np.pi * t / 24.0), t_end, t_skip)
+    min_lock = {k: min([dT for (kk, dT), s in zip(members, stats) if kk == k and is_locked(s, 24.0)],
+                       default=np.nan) for k in keys}
+    return min_lock, members, t, y
+
+min_lock, members_sine, t_sine, y_sine = sine_entrainment(("A", "B"))
+```
+
+```{python}
+#| label: fig-entrain
+#| fig-cap: "Total phosphorylated KaiC in the uniformly insensitive strategy (blue) and cancellation strategy (orange), subjected to a 24-hour temperature cycle of 30 ± 2 °C. Dotted lines mark 24-hour intervals."
+#| fig-width: 9
+#| fig-height: 4.4
+#| code-fold: true
+#| code-summary: "Figure code"
+w = t_sine >= t_sine[-1] - 24 * 6
+tt = t_sine[w] - t_sine[w][0]
+fig, (axT, axP) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=[1, 3]))
+axT.plot(tt, 30 + 2 * np.sin(2 * np.pi * t_sine[w] / 24), color=MUTED, lw=1.2)
+axT.set_ylabel("Temperature (°C)")
+for key in ("A", "B"):
+    j = members_sine.index((key, 2.0))
+    axP.plot(tt, y_sine[w][:, :, j].sum(axis=1), color=COLORS[key], label=NAMES[key])
+for d in range(7):
+    for a in (axT, axP):
+        a.axvline(24 * d, color=MUTED, lw=0.6, ls=":")
+axP.set(xlabel="Time (h)", ylabel="T+ST+S (µM)", ylim=(0.45, 2.45))
+axP.legend(loc="lower left", ncol=2, fontsize=9)
+fig.tight_layout()
+plt.show()
+```
+
+The cancellation strategy locks to 24 hours under a small temperature cycle of ±`{python} f"{min_lock['B']:.0f}"` °C, with peaks recurring at the same time each day. The uniformly insensitive strategy, however, does not entrain until the temperature amplitude reaches ±`{python} f"{min_lock['A']:.0f}"` °C. In @fig-entrain, its blue curve at ±2 °C drifts relative to the 24-hour grid each day. Temperature-compensated clocks have been shown, in principle, to entrain to temperature cycles near their natural period [@bodenstein2012]. But a less temperature-sensitive clock is harder to entrain.
+
+Why can a clock entrain to temperature cycles when its period is temperature-compensated? @fig-limitcycles overlays the limit cycles at 28 and 32 °C. In the uniformly insensitive strategy, the two nearly coincide. In the cancellation strategy, their sizes and positions differ even though their periods are almost identical. When temperature changes, the clock's state is left slightly off the limit cycle at the new temperature and then relaxes toward it. Its phase shifts during this relaxation. The time needed to complete a cycle may remain constant while the orbit itself moves with temperature. This is one way temperature compensation and entrainment can coexist. In the introduction to a recent preprint, which has not yet undergone peer review, Liu and colleagues likewise describe how temperature-dependent changes in the size and position of a limit cycle, with little change in its period, permit phase shifts in response to temperature changes, citing earlier work [@yoshida2009; @francois2012; @liu2026]. Several clock models, including a KaiC model, show that the very mechanism compensating the period moves the limit cycle and thereby produces phase shifts: period robustness and phase plasticity are two sides of the same relationship [@hatakeyama2015]. This is not the only mechanism for a phase shift, however. Even if the orbit's shape is unchanged, temperature can alter which parts are traversed quickly and which slowly, causing a phase shift at a temperature change. Other work shows that such waveform distortions affect both temperature compensation and the range of entrainment [@gibo2025]. François and colleagues also note that when period compensation relies on balancing many reactions, mean clock-protein levels vary with temperature, so the limit cycle's shape should vary as well [@francois2012].
+
+```{python}
+#| label: fig-limitcycles
+#| fig-cap: "Limit cycles at 28 °C (solid) and 32 °C (dashed). Left: uniformly insensitive strategy. Right: cancellation strategy. Both strategies have nearly constant periods, but the position and size of the orbit change with temperature in the cancellation strategy."
+#| fig-width: 9
+#| fig-height: 4
+#| code-fold: true
+#| code-summary: "Figure code"
+def plot_limitcycles(ax, key):
+    qs = [at_temperature(p0, T, STRATEGIES[key]) for T in (28.0, 32.0)]
+    tl, yl = integrate(stack(qs), 600, dt=0.01, record_every=5)
+    pers = period_amp_from(tl, yl, 300)[0]
+    for j, (ls, T) in enumerate((("-", 28), ("--", 32))):
+        one = tl >= tl[-1] - pers[j]                       # Plot only the final cycle
+        yy = yl[one][:, :, j]
+        ax.plot(yy[:, 2], yy.sum(axis=1), linestyle=ls, color=COLORS[key], lw=1.6,
+                label=f"{T} °C (period {pers[j]:.1f} h)")
+    ax.set(xlim=(0.3, 0.9), ylim=(0.75, 2.45), xlabel="S-state KaiC (µM)")
+    ax.set_title(NAMES[key], fontsize=10.5, loc="left")
+    ax.legend(fontsize=8.5, loc="upper right")
+
+fig, axes = plt.subplots(1, 2)
+for ax, key in zip(axes, ("A", "B")):
+    plot_limitcycles(ax, key)
+axes[0].set_ylabel("T+ST+S (µM)")
+fig.tight_layout()
+plt.show()
+```
+
+The actual in vitro clock also entrains to temperature cycles. Yoshida and colleagues showed that it entrains to cycles alternating between 30 and 45 °C, and that each upward or downward temperature step produces a discrete phase shift whose size depends on the phase at which the step occurs [@yoshida2009]. The period stays unchanged, while phase shifts occur at the moments of temperature change—the same mechanism illustrated by the model. Another model focused on sequestration feedback also discusses how temperature-dependent sequestration of KaiA and KaiB can support both compensation and temperature entrainment [@brettschneider2010].
+
+The strengths and weaknesses of the two strategies are now opposites. The uniformly insensitive strategy operates over a broad temperature range and withstands mutations, but does not stop at the observed low temperatures and is difficult to entrain. The cancellation strategy stops at low temperature and entrains readily, but operates only over a narrow temperature range and is vulnerable to mutations. Are temperature insensitivity and temperature sensing incompatible after all?
+
+@fig-limitcycles offers a clue. One expression of temperature sensing was a change in the shape or position of the limit cycle without a change in period. We should therefore be able to construct ledgers for the limit cycle's shape and for temperature-induced phase shifts, just as we did for the period.
+
+## Ledgers for amplitude and phase response {#sec-amplitude}
+
+### Amplitude control coefficients
+
+Many quantities describe the shape of a limit cycle. Here we use the amplitude $A$, defined as the peak-to-trough difference in total phosphorylated KaiC, T+ST+S. Analogously to the period, we define an amplitude control coefficient:
+
+$$
+C^{A}_i = \frac{\partial \ln A}{\partial \ln k_i}
+$$ {#eq-cca}
+
+This measures the fractional change in amplitude caused by a fractional change in a rate constant.
+
+Amplitude control coefficients also obey a summation theorem. Scaling all rate constants by the same factor fast-forwards the clock. Doing so does not change how high or low the concentration of each phosphorylation state reaches; only the time scale changes. The amplitude is therefore unchanged, giving
+
+$$
+\sum_i C^{A}_i = 0
+$$ {#eq-sum-a}
+
+Whereas the right-hand side of the period summation theorem, @eq-sum, is −1, the amplitude summation theorem has a right-hand side of 0. Both were previously derived in metabolic control analysis of oscillations [@kholodenko1997].
+
+The temperature dependence of amplitude can also be written in the same form as @eq-dlntau:
+
+$$
+\frac{d \ln A}{d T} = \frac{1}{RT^{2}} \sum_i C^{A}_i E_i
+$$ {#eq-dlnA}
+
+If the period ledger $\sum_i C_i E_i$ is zero, the period does not change with temperature. If the amplitude ledger $\sum_i C^A_i E_i$ is nonzero, amplitude does change. These are distinct ledgers, so it should be possible to keep one balanced while leaving the other unbalanced.
+
+The amplitude summation theorem yields another useful result. Using @eq-sum-a, we can rewrite the amplitude ledger in terms of deviations from the mean activation energy $\bar{E}$:
+
+$$
+\sum_i C^{A}_i E_i = \sum_i C^{A}_i \left(E_i - \bar{E}\right)
+$$ {#eq-amp-dev}
+
+Because $\sum_i C^A_i = 0$, this equality holds for any constant in place of $\bar{E}$, not just the mean. What matters is how activation energies and amplitude control coefficients correlate across reactions. If every reaction has the same activation energy, the right-hand side is zero and amplitude is temperature-independent. For amplitude to increase with temperature, activation energies must vary across reactions, with a tendency for amplitude-increasing reactions, $C^A_i > 0$, to have larger activation energies. Observing a temperature-dependent amplitude in a temperature-compensated clock is thus itself evidence that its reactions do not all have the same activation energy.
+
+This argument assumes that temperature changes only rate constants. If equilibrium constants such as $K_{1/2}$ also vary with temperature, their contributions enter the amplitude ledger as well. More precisely, a temperature-dependent amplitude means that temperature does more than uniformly fast-forward the whole clock. It is this assumption of uniform fast-forwarding that the observation directly rules out. It does not rule out mechanisms centered on temperature-insensitive reactions: even small differences in activation energy can produce large amplitude changes if the clock is near a bifurcation, as we will see shortly.
+
+Several temperature-compensated clocks exhibit quantities that vary with temperature: FRQ protein abundance in *Neurospora crassa* [@liu1998], the expression amplitudes of some clock genes in cultured rat cells [@kurosawa2017], and the amplitude of KaiABC phosphorylation rhythms [@murayama2017]. Theory has also predicted increasing amplitude with temperature in compensated oscillators [@ruoff2003]. Here, we express this behavior through control coefficients alongside the period ledger.
+
+```{python}
+#| label: amplitude-coeffs
+def amplitude_coeffs(p, names, h=0.01):
+    """Control coefficients of amplitude (peak-to-trough T+ST+S); record finely to locate extrema accurately."""
+    plist = []
+    for n in names:
+        for s in (+1, -1):
+            q = dict(p)
+            q[n] = p[n] * np.exp(s * h)
+            plist.append(q)
+    t, y = integrate(stack(plist), 1000, dt=0.01, record_every=1)
+    _, amp = period_amp_from(t, y, 600)
+    return {n: (np.log(amp[2 * i]) - np.log(amp[2 * i + 1])) / (2 * h) for i, n in enumerate(names)}
+
+CA_all = amplitude_coeffs(p0, RATE_NAMES + ["KHALF"])
+CA = {n: CA_all[n] for n in RATE_NAMES}
+CA_sum = sum(CA.values())
+amp_ledger = {key: sum(CA[n] * STRATEGIES[key][n] for n in RATE_NAMES) for key in ("A", "B")}
+
+# Convert the amplitude increase in Murayama et al.'s data (25–30 °C) to a ledger value
+i25, i30m = np.argmin(abs(murayama[:, 0] - 25)), np.argmin(abs(murayama[:, 0] - 30))
+slope_exp = np.log(murayama[i30m, 2] / murayama[i25, 2]) / (murayama[i30m, 0] - murayama[i25, 0])
+ledger_exp = slope_exp * R_GAS * (T_REF + 273.15) ** 2
+
+# Estimate the Hopf temperature by fitting amplitude squared as a linear function of temperature (at or below 26 °C)
+low = murayama[:, 0] < 26
+sl, ic = np.polyfit(murayama[low, 0], murayama[low, 2] ** 2, 1)
+Tc_fit = -ic / sl
+hopf_ledger = R_GAS * (27.5 + 273.15) ** 2 / (2 * (27.5 - Tc_fit))
+```
+
+Numerically, the amplitude control coefficients of the nine rate constants sum to `{python} f"{round(CA_sum, 3) + 0.0:.3f}"`, confirming @eq-sum-a.
+
+This equation explains why the uniformly insensitive strategy sensed temperature so weakly. If every reaction has the same activation energy $E_0$, the amplitude ledger is $E_0 \sum_i C^A_i = 0$, and amplitude is temperature-independent. In our uniformly insensitive strategy, S → ST has a slightly different activation energy, so the ledger is not exactly zero, but its value is small: `{python} f"{amp_ledger['A']:.0f}"` kJ/mol. The cancellation strategy's amplitude ledger is `{python} f"{amp_ledger['B']:.0f}"` kJ/mol. For comparison, in Murayama and colleagues' data, amplitude increases by approximately `{python} f"{(np.exp(slope_exp) - 1) * 100:.0f}"`% per °C between 25 and 30 °C. Through @eq-dlnA, this corresponds to a ledger value of about `{python} f"{ledger_exp:.0f}"` kJ/mol. The real clock's amplitude ledger is clearly unbalanced. In terms of @eq-amp-dev, amplitude-increasing reactions have activation energies appreciably above the mean.
+
+This value needs care in interpretation, however. In Murayama and colleagues' data, amplitude squared decreases approximately linearly as temperature falls. This is the behavior expected just above a Hopf bifurcation, where $d\ln A/dT = 1/\{2(T - T_c)\}$ grows as the bifurcation temperature $T_c$ is approached. Fitting a line to amplitude squared gives $T_c$ ≈ `{python} f"{Tc_fit:.1f}"` °C. Evaluating this expression at 27.5 °C and converting to ledger units yields approximately `{python} f"{hopf_ledger:.0f}"` kJ/mol. The large experimental amplitude ledger also reflects the fact that 25–30 °C remains close to the bifurcation.
+
+### The phase-response ledger
+
+The amplitude ledger tells us how the size of the oscillation changes with temperature and whether it tends to disappear upon cooling. But amplitude does not directly determine whether the clock entrains to a temperature cycle. What matters is how much its phase shifts after a small temperature change: the *phase response*. Even if amplitude changes, entrainment does not occur if the clock's rate of advance changes equally at every phase.
+
+For a clock at phase $\phi$, with one cycle represented by 0–2π, let $g_i(\phi)$ describe the change in phase velocity per change in the logarithm of reaction $i$'s rate constant. Raising temperature by $\delta T$ changes each log rate constant by $E_i\,\delta T / RT^2$, so the phase response to temperature is
+
+$$
+\Gamma_T(\phi) = \frac{1}{RT^{2}} \sum_i E_i\, g_i(\phi)
+$$ {#eq-gamma}
+
+This has the same ledger form as the period and amplitude equations, but now the ledger has a value at every phase.
+
+The fast-forwarding argument applies again. Increasing every rate constant by the same factor simply moves the clock around the same orbit faster by that factor, so phase velocity increases proportionally at every phase. Thus, $\sum_i g_i(\phi)$ is independent of phase and equals the angular frequency $\omega = 2\pi/\tau$. Also, the cycle average of $g_i$ is $-\omega C_i$, because it represents the change in period caused by changing that rate constant. This relationship between phase responses accumulated over a cycle and the resulting period change is established in oscillator sensitivity analysis [@gunawan2006; @taylor2008]. Together, these facts give
+
+$$
+\Gamma_T(\phi) = -\frac{\omega}{RT^{2}} \sum_i C_i E_i + \frac{1}{RT^{2}} \sum_i \left(E_i - \bar{E}\right)\left(g_i(\phi) + \omega C_i\right)
+$$ {#eq-gamma-split}
+
+The first term is the period ledger itself, a constant independent of phase. It vanishes when the period is compensated. Only the second term varies with phase, and it depends solely on deviations $E_i - \bar{E}$ from the mean activation energy.
+
+This leads to a conclusion: **if temperature merely rescales time, the clock cannot entrain to temperature cycles.** Temperature changes then alter the clock's rate of advance by the same amount at every phase, providing no restoring effect that aligns phases. A clock with identical activation energies, such as the all-50-kJ/mol clock in Section 5, is an example. As with amplitude, however, this conclusion rules out only the assumption that temperature acts solely through uniform fast-forwarding. In a clock whose period is compensated but whose dynamics still respond to temperature, activation energies necessarily vary. The important question is therefore not whether they vary, but which reactions carry that variation and how.
+
+We now calculate $g_i(\phi)$ numerically. At each phase of the oscillation, we perturb one rate constant slightly for a short interval, 30 minutes, and measure the phase shift after sufficient time has passed.
+
+```{python}
+#| label: prc
+def phase_response(p, names, n_phase=64, eps=0.05, pulse=0.5):
+    """Perturb each parameter by exp(±eps) for a duration pulse at each phase, and use the phase shift to estimate
+    the reaction's phase response g_i(φ): change in phase velocity per unit ln k_i, in 1/h."""
+    t, y = integrate(stack([p]), 1600, dt=0.01, record_every=1)
+    Ptot = y[:, :, 0].sum(axis=1)
+    keep = t > 1200
+    level = Ptot[keep].mean()
+    def up_cross(tt, PP):
+        c = PP - level
+        i = np.where((c[:-1] < 0) & (c[1:] >= 0))[0]
+        return tt[i] - c[i] * (tt[i + 1] - tt[i]) / (c[i + 1] - c[i])
+    tc = up_cross(t[keep], Ptot[keep])
+    tau = np.diff(tc).mean()
+    i0 = np.searchsorted(t, tc[0])                        # Phase 0: T+ST+S crosses its mean from below
+    starts = [i0 + int(round(j * tau / n_phase / 0.01)) for j in range(n_phase)]
+    cols = [(j, None, 0) for j in range(n_phase)] + \
+           [(j, n, s) for j in range(n_phase) for n in names for s in (+1, -1)]
+    base = {k: np.full(len(cols), v) for k, v in p.items()}
+    pert = {k: v.copy() for k, v in base.items()}
+    for c, (j, n, s) in enumerate(cols):
+        if n is not None:
+            pert[n][c] *= np.exp(s * eps)
+    x0 = np.concatenate([y[starts[j], :, 0].reshape(3, 1) for j, _, _ in cols], axis=1)
+    tt, yy = integrate(base, 6 * tau, dt=0.01, x0=x0, record_every=2,
+                       forcing=lambda s: pert if s < pulse else base)
+    PP = yy.sum(axis=1)
+    first = []
+    for c in range(len(cols)):
+        cc = up_cross(tt, PP[:, c])
+        first.append(cc[cc > 4 * tau][0])                 # First crossing after sufficient relaxation
+    first = np.array(first)
+    pos = {col: k for k, col in enumerate(cols)}
+    wrap = lambda d: (d + tau / 2) % tau - tau / 2
+    g = {}
+    for n in names:
+        adv = [wrap(first[pos[(j, None, 0)]] - first[pos[(j, n, +1)]])
+               - wrap(first[pos[(j, None, 0)]] - first[pos[(j, n, -1)]]) for j in range(n_phase)]
+        g[n] = np.array(adv) * (2 * np.pi / tau) / (2 * eps * pulse)
+    return np.arange(n_phase) / n_phase * 2 * np.pi, tau, g
+
+phi_g, tau_g, g_rate = phase_response(p_ref, RATE_NAMES)
+omega_g = 2 * np.pi / tau_g
+RT2 = R_GAS * (T_REF + 273.15) ** 2
+sum_g = sum(g_rate.values()) / omega_g
+
+def gamma_T(E):
+    """Temperature phase response Γ_T(φ), per kelvin, in 1/h."""
+    return sum(E[n] * g_rate[n] for n in RATE_NAMES) / RT2
+
+def gamma_first_harmonic(E):
+    """Magnitude of the fundamental harmonic of Γ_T."""
+    G = gamma_T(E)
+    return np.hypot(2 * np.mean(G * np.cos(phi_g)), 2 * np.mean(G * np.sin(phi_g)))
+```
+
+```{python}
+#| label: fig-prc
+#| fig-cap: "Left: phase response $g_i(\\phi)$ of each reaction at 30 °C: how much increasing a rate constant at a given phase speeds up the clock, normalized by the angular frequency ω. The black dashed line is the sum over all nine reactions. Right: temperature phase response $\\Gamma_T(\\phi)$: the percentage increase in clock speed caused by a 1 °C temperature increase at each phase. Phase 0 on the horizontal axis is the upward crossing of the mean total phosphorylated KaiC."
+#| fig-width: 11
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "Figure code"
+hours = phi_g / (2 * np.pi) * tau_g
+fig, ax = plt.subplots(1, 2)
+for n in RATE_NAMES:
+    color = ORANGE if n == "SD_b" else (BLUE if n == "DS_f" else (AQUA if n == "UT_b" else GRID))
+    lw = 2.0 if color != GRID else 1.2
+    ax[0].plot(hours, g_rate[n] / omega_g, color=color, lw=lw,
+               label=LABELS[n] if color != GRID else None, zorder=3 if color != GRID else 2)
+ax[0].plot(hours, sum_g, color=INK2, ls="--", lw=1.4, label="Sum of all 9")
+ax[0].set(xlabel="Phase (h)", ylabel="$g_i(\\phi)$ / ω")
+ax[0].legend(fontsize=8.5, loc="upper right")
+E_uniform = {n: 50.0 for n in RATE_NAMES}
+for key, E, color, lab in (("U", E_uniform, MUTED, "All 50 kJ/mol (uncompensated)"),
+                            ("A", STRATEGIES["A"], COLORS["A"], NAMES["A"]),
+                            ("B", STRATEGIES["B"], COLORS["B"], NAMES["B"])):
+    ax[1].plot(hours, gamma_T(E) / omega_g * 100, color=color, label=lab)
+ax[1].axhline(0, color=INK2, lw=0.8)
+ax[1].set(xlabel="Phase (h)", ylabel="$\\Gamma_T(\\phi)$ (%/°C)")
+ax[1].legend(fontsize=8.5, loc="lower left")
+fig.tight_layout()
+plt.show()
+```
+
+In the left panel of @fig-prc, the individual reaction responses vary strongly with phase, but their sum is 1 at every phase, ranging numerically from `{python} f"{sum_g.min():.3f}"` to `{python} f"{sum_g.max():.3f}"` in the plotted normalization. This is exactly what the fast-forwarding argument predicts.
+
+The right panel shows the temperature phase response. In the all-50-kJ/mol clock, $\Gamma_T$ is nearly constant across phases, approximately `{python} f"{np.mean(gamma_T(E_uniform)) / omega_g * 100:.1f}"`%/°C. Warming simply speeds up the clock equally at every phase, so it cannot align its phase to a temperature cycle. In the compensated uniformly insensitive and cancellation strategies, the mean response is zero and the response takes positive and negative values across the cycle. Warming advances the clock at some phases and delays it at others. This phase dependence provides the restoring effect needed for entrainment. Its excursion is much larger in the cancellation strategy, consistent with the stronger entrainment observed in Section 8.
+
+We can now separate two aspects of "sensing temperature": amplitude changes are described by the amplitude ledger, and entrainment by the phase-response ledger. The amplitude ledger is only a local slope at 30 °C, however. For a gradual Hopf bifurcation like that observed experimentally, it is connected to the temperature at which oscillation stops through the relation $1/\{2(T - T_c)\}$ discussed above. In this model, with its sharp KaiA sequestration switch, amplitude collapses so abruptly that its slope at 30 °C cannot predict the stopping temperature. In both ledgers, what matters is the deviation of activation energies from their mean, $E_i - \bar{E}$.
+
+### Where should temperature-sensitive reactions be placed?
+
+How can we unbalance the amplitude ledger while keeping the period ledger balanced? @fig-two-ledgers plots each reaction's period control coefficient against its amplitude control coefficient.
+
+```{python}
+#| label: fig-two-ledgers
+#| fig-cap: "Period control coefficient (horizontal axis) and amplitude control coefficient (vertical axis) of each reaction at 30 °C. Orange marks S → ST (KaiA), which has a positive effect on both period and amplitude. Green marks U → T (KaiA), which strongly affects amplitude but barely affects period."
+#| fig-width: 6.4
+#| fig-height: 5
+#| code-fold: true
+#| code-summary: "Figure code"
+offsets = {"UT_b": (8, 4), "TD_b": (-10, 8), "SD_b": (-8, -16), "US_b": (-10, -4), "TU_b": (8, -4),
+           "DT_b": (8, 2), "TU_f": (8, 4), "DS_f": (8, -6), "SU_f": (0, -18), "KHALF": (8, -4)}
+fig, ax = plt.subplots()
+ax.axhline(0, color=MUTED, lw=0.8)
+ax.axvline(0, color=MUTED, lw=0.8)
+for n in RATE_NAMES + ["KHALF"]:
+    x, yv = C_all[n], CA_all[n]
+    color = AQUA if n == "UT_b" else (ORANGE if n == "SD_b" else INK2)
+    ax.plot(x, yv, "o", color=color, ms=8)
+    ha = "right" if offsets[n][0] < 0 else ("center" if offsets[n][0] == 0 else "left")
+    ax.annotate(LABELS.get(n, "K½ (binding constant)"), (x, yv), offsets[n], textcoords="offset points",
+                fontsize=8.5, color=INK2, ha=ha)
+ax.set(xlabel="Period control coefficient C", ylabel="Amplitude control coefficient C^A", xlim=(-1.45, 1.45), ylim=(-1.0, 1.1))
+plt.show()
+```
+
+Three broad types of reaction emerge. Some, such as ST → S without KaiA, have negative effects on both period and amplitude. Others, such as S → ST, have positive effects on both. A third type, exemplified by KaiA-dependent U → T, has little effect on period, `{python} f"{C['UT_b']:+.2f}"`, but a strong effect on amplitude, `{python} f"{CA['UT_b']:+.2f}"`. The amplitude increase caused by a period-lengthening reaction such as S → ST follows the mechanism in Section 6: it lengthens the period by increasing the oscillatory excursion.
+
+Once the period ledger is balanced, how we unbalance the amplitude ledger depends on where we place temperature-sensitive reactions—those with large activation energies—in this plot. Broadly, there are three strategies. This is a conceptual classification for organizing the discussion, not an established taxonomy in the field. Actual clocks may combine several strategies, and the description can depend on the level at which we examine them. For example, if opposing temperature dependences within KaiC cancel to make ATPase activity insensitive, a cancellation mechanism within the molecule appears as a temperature-insensitive component at the level of the whole clock.
+
+The first strategy makes every reaction temperature-insensitive, as in the uniformly insensitive strategy of Section 7. Both ledgers remain close to zero, and the clock barely senses temperature.
+
+The second makes a reaction with positive effects on both period and amplitude, such as S → ST in the upper right, temperature-sensitive. Warming accelerates S → ST, increasing the excursion and lengthening the period. This offsets the shortening caused by acceleration of other reactions. Period compensation and amplitude growth arise from the same reaction, so we call this the *coupled strategy*. The cancellation strategy of Section 7 was an extreme coupled case in which every reaction was temperature-sensitive. The idea that increasing amplitude helps preserve period in compensated oscillators has a long history [@ruoff2003]. One study argued from mathematical models that maintaining the period requires gene-expression amplitude to increase with temperature, and demonstrated such increases for some clock genes in cultured rat cells [@kurosawa2017]. In the KaiABC clock as well, temperature dependence of the amplitude-setting switch has been reported to contribute to period compensation [@liu2026].
+
+The third strategy makes a reaction such as U → T temperature-sensitive: one that has little influence on period but a strong influence on amplitude. Increasing its activation energy barely changes the period ledger while unbalancing the amplitude ledger. Reactions that control period remain temperature-insensitive, while reactions with little effect on period sense temperature. We call this the *division-of-labor strategy*. This idea also has precedents. François and colleagues considered oscillator models in which temperature enters only a few terms, while the rest are temperature-independent. In such clocks, changing temperature merely expands or contracts the limit cycle, and the shape of the phase-response curve is also temperature-independent [@francois2012]. Kidd and colleagues developed this into a "pathway model," in which each period-determining process is individually temperature-compensated and temperature is sensed through a dedicated pathway connected to the clock [@kidd2015].
+
+We construct families of coupled and division-of-labor strategies by varying one reaction's activation energy. For the coupled family, we start from the uniformly insensitive strategy, increase the S → ST activation energy, and balance the period ledger by adjusting ST → S without KaiA. These are the only two strongly temperature-sensitive reactions. For the division-of-labor family, we increase the U → T activation energy and balance the ledger through S → ST as before.
+
+```{python}
+#| label: families
+def coupled_E(E_sd, E_base=10.0):
+    """Set the S→ST activation energy to E_sd and balance the period ledger at 30 °C using ST→S (no KaiA)."""
+    E = {n: E_base for n in RATE_NAMES}
+    E["SD_b"] = E_sd
+    E["DS_f"] = -sum(C[n] * E[n] for n in RATE_NAMES if n != "DS_f") / C["DS_f"]
+    return E
+
+fam_C = [20.0, 35.0, 50.0, 70.0]      # S→ST (20 kJ/mol is nearly the uniformly insensitive strategy)
+fam_R = [10.0, 40.0, 70.0, 100.0]     # U→T (10 kJ/mol is exactly the uniformly insensitive strategy)
+E_fams = [coupled_E(e) for e in fam_C] + [balance_E(10.0, e) for e in fam_R]
+temps_f = np.arange(0.0, 50.01, 0.5)
+per_f, amp_f = period_amp([at_temperature(p0, T, E) for E in E_fams for T in temps_f], t_end=2000, t_skip=1300)
+per_f = per_f.reshape(len(E_fams), -1)
+amp_f = amp_f.reshape(len(E_fams), -1)
+i30f = np.argmin(abs(temps_f - 30))
+stop_f = [temps_f[np.isfinite(r)].min() for r in per_f]
+aled_f = [sum(CA[n] * E[n] for n in RATE_NAMES) for E in E_fams]
+band = (temps_f >= 25) & (temps_f <= 45)
+flat_f = max(np.nanmax(np.abs(r[band] / r[i30f] - 1)) for r in per_f)
+nC = len(fam_C)
+```
+
+```{python}
+#| label: fig-families
+#| fig-cap: "Temperature dependence of period (left) and amplitude (right) in the coupled strategy (top, varying the S → ST activation energy) and division-of-labor strategy (bottom, varying the U → T activation energy). Both are normalized to their values at 30 °C. Darker colors indicate higher activation energies. Parentheses in the legends give the amplitude ledger."
+#| fig-width: 10
+#| fig-height: 7
+#| code-fold: true
+#| code-summary: "Figure code"
+oranges = ["#f6c5a8", "#f19a6c", "#eb6834", "#a3401a"]
+greens = ["#a8dcc6", "#5fc29c", "#1baf7a", "#0d6e4b"]
+fig, ax = plt.subplots(2, 2, sharex=True)
+for row, (fam, cols, name, off) in enumerate(((fam_C, oranges, "S→ST", 0), (fam_R, greens, "U→T", nC))):
+    for k, (e, c) in enumerate(zip(fam, cols)):
+        j = off + k
+        lab = f"{name}: {e:.0f} kJ/mol ({aled_f[j]:.0f})"
+        ax[row, 0].plot(temps_f, per_f[j] / per_f[j, i30f], color=c, label=lab)
+        ax[row, 1].plot(temps_f, amp_f[j] / amp_f[j, i30f], color=c, label=lab)
+    ax[row, 0].set(ylim=(0.9, 1.15), ylabel="Period / period at 30 °C")
+    ax[row, 1].set(ylim=(-0.05, 2.0), ylabel="Amplitude / amplitude at 30 °C")
+    ax[row, 0].legend(fontsize=8, loc="upper right")
+    ax[row, 0].set_title(["Coupled", "Division of labor"][row], fontsize=10.5, loc="left")
+for a in ax[1]:
+    a.set_xlabel("Temperature (°C)")
+fig.tight_layout()
+plt.show()
+```
+
+In both families, period changes very little from 25 to 45 °C, deviating from its 30 °C value by at most `{python} f"{flat_f * 100:.1f}"`%, while amplitude changes substantially (@fig-families). Increasing the activation energy of the temperature-sensitive reaction makes the amplitude ledger larger and raises the temperature at which oscillations stop on cooling. The stopping temperatures are `{python} ", ".join(f"{v:.1f}" for v in stop_f[:nC])` °C in the coupled family and `{python} ", ".join(f"{v:.1f}" for v in stop_f[nC:])` °C in the division-of-labor family. Both can unbalance the amplitude ledger while keeping the period ledger balanced.
+
+The difference is in how efficiently they do so. At the same activation energy of 70 kJ/mol, the amplitude ledger is `{python} f"{aled_f[fam_C.index(70.0)]:.0f}"` kJ/mol for the coupled strategy and `{python} f"{aled_f[nC + fam_R.index(70.0)]:.0f}"` kJ/mol for the division-of-labor strategy. In the coupled case, part of the amplitude-increasing effect of S → ST is canceled by the ST → S reaction used to balance the period; the latter's amplitude control coefficient is `{python} f"{CA['DS_f']:+.2f}"`.
+
+## Comparing the three strategies with experiments {#sec-experiment}
+
+Which strategy is closest to experiment? We use four experimental observations for comparison:
+
+1. The in vitro rhythm disappears at approximately 19 °C and is undetectable at 18.6 °C or below [@murayama2017].
+2. A stable rhythm persists at 45 °C, with almost the same period as at 30 °C: 23.4 and 23.3 hours in the same reaction mixture. 45 °C was the highest temperature at which a stable rhythm was observed [@yoshida2009].
+3. The period Q~10~ between 25 and 35 °C is approximately 1.05–1.1 [@nakajima2005; @itomiwa2020].
+4. The clock entrains to cycles alternating equally between 30 and 45 °C when their periods are 20–28 hours, but not at 16 or 32 hours [@yoshida2009].
+
+Three caveats are needed before comparing them. First, experimental conditions differ. The period at 30 °C ranges from roughly 21 to 26 hours depending on protein preparation [@nakajima2005; @yoshida2009; @murayama2017]. Period Q~10~ also depends on KaiA concentration: it can be 1.05 under standard conditions but rises to 1.27–1.30 when KaiA is increased approximately threefold [@itomiwa2020]. We therefore compare periods and amplitudes relative to their values at 30 °C, focusing on differences between strategies rather than precise numerical agreement.
+
+Second, some parameters have been tuned. We set the S → ST activation energy in the coupled strategy and the U → T activation energy in the division-of-labor strategy to 70 kJ/mol, corresponding to a reaction-rate Q~10~ of approximately `{python} f"{q10_rate(70):.1f}"`. At this value, both strategies reproduce the experimental pattern of entrainment to 30/45 °C cycles. That pattern therefore cannot serve to distinguish them.
+
+Third, the period at 45 °C also does not distinguish the strategies. Since each period ledger is balanced at 30 °C, their periods change relatively little even at 45 °C. Differences emerge in the temperature at which oscillations stop, the temperature dependence of amplitude, and the ease of entrainment to sinusoidal temperature cycles. As in Section 8, we use a model rescaled to a 23.1-hour period at 30 °C.
+
+```{python}
+#| label: compare
+STRATEGIES["C"] = coupled_E(70.0)
+STRATEGIES["R"] = balance_E(10.0, 70.0)
+keys = ("A", "B", "C", "R")
+iC, iR = keys.index("C"), keys.index("R")
+temps_c = np.arange(10.0, 55.01, 0.5)
+per_c, amp_c = period_amp([at_temperature(p_ref, T, STRATEGIES[k]) for k in keys for T in temps_c],
+                          t_end=2400, t_skip=1600)
+per_c = per_c.reshape(len(keys), -1)
+amp_c = amp_c.reshape(len(keys), -1)
+i30c = np.argmin(abs(temps_c - 30))
+
+# Temperature cycles spending equal time at 30 °C and 45 °C (integrate longer to assess entrainment reliably)
+cycle_T = [16.0, 20.0, 24.0, 28.0, 32.0]
+mem = [(k, Tp) for k in keys for Tp in cycle_T]
+Tp_arr = np.array([Tp for _, Tp in mem])
+stats_sq, _, _ = run_forced(p_ref, [[STRATEGIES[k][n] for n in RATE_NAMES] for k, _ in mem],
+                            lambda t: np.where(np.mod(t, Tp_arr) < Tp_arr / 2, 45.0, 30.0),
+                            t_end=5000, t_skip=4000)
+locked_sq = np.array([is_locked(s, Tp) for s, (_, Tp) in zip(stats_sq, mem)]).reshape(len(keys), -1)
+
+min_lock.update(sine_entrainment(("C", "R"))[0])     # 24-hour sinusoid (A and B were computed in Section 8)
+detune = abs(omega_g - 2 * np.pi / 24.0)             # Difference between the clock and temperature-cycle angular frequencies
+pred_lock = {k: 2 * detune / gamma_first_harmonic(STRATEGIES[k]) for k in keys}   # Phase-response prediction
+for k in ("C", "R"):
+    mut[k] = mutation_test(p0, STRATEGIES[k])
+    amp_ledger[k] = sum(CA[n] * STRATEGIES[k][n] for n in RATE_NAMES)
+
+stop_c = {k: temps_c[np.isfinite(per_c[i])].min() for i, k in enumerate(keys)}
+r45_c = {k: per_c[i, np.argmin(abs(temps_c - 45))] / per_c[i, i30c] for i, k in enumerate(keys)}
+amp_at_stop = {k: amp_c[i, np.argmin(abs(temps_c - stop_c[k]))] / amp_c[i, i30c] for i, k in enumerate(keys)}
+```
+
+```{python}
+#| label: tbl-compare
+#| tbl-colwidths: [24, 15, 15, 15, 15, 16]
+#| tbl-cap: "Comparison of the four strategies with experiments; model periods at 30 °C are set to 23.1 hours. ○ indicates entrainment, and × indicates no entrainment. The cancellation strategy does not oscillate at 45 °C, so its ○ represents a response forced by temperature changes. Sinusoidal simulations test amplitudes of ±1, 2, 3, and 5 °C and report the smallest that produces entrainment. The mutant row gives the median $|\\ln Q_{10}|$ and the number that stop oscillating at 25 °C or 35 °C, using the same 20 mutants as in Section 7."
+def at_Tc(i, T):
+    return per_c[i, np.argmin(abs(temps_c - T))]
+def osc_range(i):
+    ok = temps_c[np.isfinite(per_c[i])]
+    lo = f"≤{temps_c[0]:.0f}" if ok.min() <= temps_c[0] else f"{ok.min():.1f}"
+    hi = f"≥{temps_c[-1]:.0f}" if ok.max() >= temps_c[-1] else f"{ok.max():.1f}"
+    return f"{lo}–{hi}"
+rows_tbl = {
+    "Oscillating temperature range (°C)": [osc_range(i) for i in range(len(keys))] + ["Approx. 19–45"],
+    "Amplitude ledger (kJ/mol)": [f"{amp_ledger[k]:.0f}" for k in keys] + [f"Approx. {ledger_exp:.0f}"],
+    "Q10 (25–35 °C)": [f"{at_Tc(i, 25) / at_Tc(i, 35):.3f}" for i in range(len(keys))] + ["Approx. 1.05–1.1"],
+    "Period ratio (45 °C / 30 °C)": [("—" if np.isnan(at_Tc(i, 45)) else f"{at_Tc(i, 45) / at_Tc(i, 30):.3f}") for i in range(len(keys))] + ["Approx. 1.00"],
+    "Entrainment to 30/45 °C cycles (periods: 16, 20, 24, 28, 32 h)": [" ".join("○" if x else "×" for x in locked_sq[i]) for i in range(len(keys))] + ["× ○ ○ ○ ×"],
+    "Minimum amplitude for entrainment to a 24-hour sinusoid (simulation)": [f"±{min_lock[k]:.0f} °C" for k in keys] + ["—"],
+    "Same threshold, predicted from phase response": [f"±{pred_lock[k]:.1f} °C" for k in keys] + ["—"],
+    "Mutants (median / number stopped)": [f"{mut[k]['med']:.3f} / {mut[k]['lost']}" for k in keys] + ["—"],
+}
+lines = ["| | " + " | ".join(NAMES[k] for k in keys) + " | Experiments |", "|:--|:--:|:--:|:--:|:--:|:--:|"]
+for label, vals in rows_tbl.items():
+    lines.append(f"| {label} | " + " | ".join(vals) + " |")
+Markdown("\n".join(lines))
+```
+
+```{python}
+#| label: fig-vs-exp
+#| fig-cap: "Temperature dependence of period (left) and amplitude (right), normalized to their values at 30 °C. Lines show models with periods at 30 °C set to 23.1 hours; points show experiments. Values from Murayama et al. (2017) were read from Fig. 2B."
+#| fig-width: 11
+#| fig-height: 4.2
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots(1, 2)
+for i, key in enumerate(keys):
+    ax[0].plot(temps_c, per_c[i] / per_c[i, i30c], color=COLORS[key], label=NAMES[key])
+    ax[1].plot(temps_c, amp_c[i] / amp_c[i, i30c], color=COLORS[key], label=NAMES[key])
+ax[0].plot([25, 30, 35], np.array([22, 21, 20]) / 21, "s", color="#0b0b0b", ms=7, label="Nakajima et al. 2005")
+ax[0].plot([30, 45], [1.0, 23.3 / 23.4], "D", color="#0b0b0b", mfc="white", ms=7, mew=1.5, label="Yoshida et al. 2009")
+ax[0].plot(murayama[:, 0], murayama[:, 1] / murayama[-1, 1], "o", color=MUTED, ms=5, label="Murayama et al. 2017")
+ax[0].set(xlim=(10, 52), ylim=(0.85, 1.35), xlabel="Temperature (°C)", ylabel="Period / period at 30 °C")
+ax[0].legend(fontsize=8, loc="upper left")
+ax[1].plot(murayama[:, 0], murayama[:, 2] / murayama[-1, 2], "o", color="#0b0b0b", ms=6, label="Murayama et al. 2017")
+ax[1].set(xlim=(10, 52), ylim=(-0.05, 1.7), xlabel="Temperature (°C)", ylabel="Amplitude / amplitude at 30 °C")
+ax[1].legend(fontsize=8, loc="upper left")
+fig.tight_layout()
+plt.show()
+```
+
+In @tbl-compare and @fig-vs-exp, the clearest distinction is the temperature at which oscillations stop. The uniformly insensitive strategy does not stop in the relevant low-temperature range. The cancellation, coupled, and division-of-labor strategies stop at `{python} f"{stop_c['B']:.1f}"`, `{python} f"{stop_c['C']:.1f}"`, and `{python} f"{stop_c['R']:.1f}"` °C, respectively. The division-of-labor strategy is closest to the experimental value of about 19 °C, but is still roughly 2 °C too high; experimentally, rhythms remain observable at 19.5–21 °C. Estimates of the bifurcation temperature do depend on the analysis, however. A reanalysis of Murayama and colleagues' data based on responses after cooling placed it at approximately 21.4 °C [@mihalcescu2025]. The difference between the division-of-labor and coupled strategies also shrinks with different tuning. As shown in Section 9, setting S → ST to 50 kJ/mol in the coupled strategy gives a stopping temperature of `{python} f"{stop_f[fam_C.index(50.0)]:.1f}"` °C, almost the same as in the division-of-labor strategy. The stopping temperature alone cannot distinguish these two. The cancellation strategy cannot sustain oscillations up to 45 °C; its period matching the 30/45 °C cycle is better interpreted as a response driven by temperature changes than as entrainment of a sustained oscillator.
+
+None of the strategies reaches the experimentally estimated amplitude ledger of approximately `{python} f"{ledger_exp:.0f}"` kJ/mol. The cancellation strategy comes closest, at `{python} f"{amp_ledger['B']:.0f}"` kJ/mol, followed by the division-of-labor strategy at `{python} f"{amp_ledger['R']:.0f}"` kJ/mol and the coupled strategy at `{python} f"{amp_ledger['C']:.0f}"` kJ/mol. This ordering does not match the ordering of stopping temperatures. As cautioned in Section 9, this model's amplitude ledger at 30 °C cannot predict where oscillation stops. There is also a shared discrepancy in the shape of the amplitude curve. All three strategies that stop at low temperature collapse abruptly to zero from an amplitude still several tens of percent of the 30 °C value: `{python} f"{amp_at_stop['R'] * 100:.0f}"`% for the division-of-labor strategy and `{python} f"{amp_at_stop['C'] * 100:.0f}"`% for the coupled strategy. This reflects the sharp KaiA sequestration switch discussed in Section 8. Experimentally, amplitude approaches zero gradually near 19 °C. These two discrepancies—the undersized amplitude ledger and the abrupt collapse—share a cause. As discussed in Section 9, the large experimental ledger reflects a gradual amplitude decline approaching a Hopf bifurcation. The model's sharp sequestration switch leaves almost no such gradual regime, as seen in Section 8.
+
+Entrainment to temperature cycles can be predicted from the phase response in Section 9. When the clock is driven by a temperature cycle of amplitude $\Delta T$ and angular frequency $\Omega$, the phase difference $\psi$ between clock and temperature cycle obeys, after averaging over a cycle,
+
+$$
+\frac{d\psi}{dt} = (\omega - \Omega) + \Delta T\, H(\psi)
+$$ {#eq-locking}
+
+Here, $H(\psi)$ is determined by the fundamental harmonic of $\Gamma_T$, the component with one period per cycle, and its amplitude is half the harmonic magnitude $|\Gamma_1|$. Entrainment requires a constant phase difference, so there must be a $\psi$ at which the right-hand side is zero. The minimum entraining amplitude is therefore $\Delta T_{\min} = 2|\omega - \Omega| / |\Gamma_1|$. As @tbl-compare shows, this prediction agrees well with the simulations. Moreover, although the amplitude ledgers of the uniformly insensitive and coupled strategies differ by about a factor of three—`{python} f"{amp_ledger['A']:.0f}"` and `{python} f"{amp_ledger['C']:.0f}"` kJ/mol—their ease of entrainment is almost identical, with predicted thresholds of ±`{python} f"{pred_lock['A']:.1f}"` and ±`{python} f"{pred_lock['C']:.1f}"` °C. Understanding entrainment requires the phase-response ledger, not the amplitude ledger.
+
+Mutational robustness differs across strategies. The division-of-labor strategy is about as robust as the uniformly insensitive strategy, with a median $|\ln Q_{10}|$ of `{python} f"{mut['R']['med']:.3f}"`. The coupled strategy, at `{python} f"{mut['C']['med']:.3f}"`, lies between these and the cancellation strategy, at `{python} f"{mut['B']['med']:.3f}"`. The coupled strategy also has `{python} f"{mut['C']['lost']}"` mutants that lose oscillation, although its unmutated clock already stops below `{python} f"{stop_c['C']:.1f}"` °C, placing the 25 °C test near the boundary of its range. We do not have experimental values for this robustness comparison.
+
+We next examine how the stopping temperature and entrainment pattern depend on the tuned parameters in the division-of-labor strategy. @tbl-param-scan varies the U → T activation energy and the activation energy $E_0$ of the temperature-insensitive part, which has so far been fixed at 10 kJ/mol.
+
+```{python}
+#| label: param-scan
+E0_scan = [5.0, 10.0, 12.5, 15.0, 20.0]
+sens_scan = [50.0, 60.0, 70.0]
+combos = [(e0, es) for e0 in E0_scan for es in sens_scan]
+temps_scan = np.concatenate([np.arange(17.0, 25.01, 0.5), [30.0, 45.0]])
+per_scan, _ = period_amp([at_temperature(p_ref, T, balance_E(e0, es)) for e0, es in combos for T in temps_scan],
+                         t_end=2400, t_skip=1600)
+per_scan = per_scan.reshape(len(combos), -1)
+n_low = len(temps_scan) - 2
+stop_scan = {c: temps_scan[:n_low][np.isfinite(r[:n_low])].min() for c, r in zip(combos, per_scan)}
+r45_scan = {c: r[-1] / r[-2] for c, r in zip(combos, per_scan)}
+
+mem_scan = [(c, Tp) for c in combos for Tp in cycle_T]
+Tp_scan = np.array([Tp for _, Tp in mem_scan])
+stats_scan, _, _ = run_forced(p_ref, [[balance_E(*c)[n] for n in RATE_NAMES] for c, _ in mem_scan],
+                              lambda t: np.where(np.mod(t, Tp_scan) < Tp_scan / 2, 45.0, 30.0),
+                              t_end=5000, t_skip=4000)
+lock_scan = {c: " ".join("○" if is_locked(st, Tp) else "×" for st, (cc, Tp) in zip(stats_scan, mem_scan) if cc == c)
+             for c in combos}
+```
+
+```{python}
+#| label: tbl-param-scan
+#| tbl-cap: "Oscillation stopping temperatures and entrainment to 30/45 °C cycles (periods: 16, 20, 24, 28, and 32 hours) in the division-of-labor strategy, varying the activation energy $E_0$ of the temperature-insensitive reactions and that of U → T. Experimental results are approximately 19 °C and '× ○ ○ ○ ×'. The rightmost column gives the period ratio at 45 °C versus 30 °C with a U → T activation energy of 70 kJ/mol."
+#| tbl-colwidths: [16, 23, 23, 23, 15]
+def cell(c):
+    st = stop_scan[c]
+    st_s = f"≤{temps_scan[0]:.0f} °C" if st <= temps_scan[0] else f"{st:.1f} °C"
+    return f"{st_s}  {lock_scan[c]}"
+lines = ["| $E_0$ (kJ/mol) | " + " | ".join(f"U → T: {es:.0f} kJ/mol" for es in sens_scan) + " | 45 °C / 30 °C |",
+         "|:--:|:--:|:--:|:--:|:--:|"]
+for e0 in E0_scan:
+    lines.append(f"| {e0:g} | " + " | ".join(cell((e0, es)) for es in sens_scan) + f" | {r45_scan[(e0, 70.0)]:.3f} |")
+Markdown("\n".join(lines))
+```
+
+Keeping $E_0$ at 10 kJ/mol while lowering the U → T activation energy brings the stopping temperature closer to experiment, but eliminates entrainment to the 28-hour cycle. Entrainment at 28 hours is marginal: it appears only when U → T reaches 70 kJ/mol. Varying $E_0$ as well allows both observations to be matched. For example, $E_0$ = 12.5 kJ/mol and U → T = 50 kJ/mol give a stopping temperature of `{python} f"{stop_scan[(12.5, 50.0)]:.1f}"` °C and an entrainment pattern of "`{python} lock_scan[(12.5, 50.0)]`," both matching experiment. This is fitting two parameters to two observations, however, and does not establish that the model is correct.
+
+If $E_0$ is increased too far, the period starts to lengthen at high temperatures. With U → T at 70 kJ/mol, the period at 45 °C remains almost equal to that at 30 °C for $E_0$ up to 15 kJ/mol, but reaches `{python} f"{r45_scan[(20.0, 70.0)]:.3f}"` times the 30 °C value at 20 kJ/mol. An activation energy of 15 kJ/mol corresponds to a reaction-rate Q~10~ of approximately `{python} f"{q10_rate(15):.1f}"`. For the division-of-labor strategy to work, period-controlling reactions must therefore be about as temperature-insensitive as the KaiC ATPase discussed in Section 2, whose Q~10~ is approximately 1.2 with KaiA and KaiB present [@terauchi2007]. We examine whether this assumption holds in the actual clock in Section 11.
+
+There are other mismatches. Except in the cancellation strategy, period Q~10~ between 25 and 35 °C is close to 1.00, more strongly compensated than the experimental 1.05–1.1. This follows from balancing the ledger exactly to zero at 30 °C. Experimentally, stable rhythms are lost above 45 °C, whereas all models except the cancellation strategy continue oscillating beyond 50 °C. The model does not include processes such as changes to the proteins themselves at high temperature. Finally, its dependence on KaiA concentration goes in the opposite direction from experiment.
+
+```{python}
+#| label: kaia-dependence
+kaia_list = [1.3, 1.45]
+per_ka, _ = period_amp([at_temperature({**p_ref, "KAIA": ka}, T, STRATEGIES["R"]) for ka in kaia_list for T in (25.0, 35.0)],
+                       t_end=2400, t_skip=1600)
+q10_ka = per_ka.reshape(len(kaia_list), 2)[:, 0] / per_ka.reshape(len(kaia_list), 2)[:, 1]
+```
+
+Increasing KaiA from 1.3 to 1.45 µM in the division-of-labor strategy lowers Q~10~ from `{python} f"{q10_ka[0]:.3f}"` to `{python} f"{q10_ka[1]:.3f}"`, shifting it toward overcompensation. Experimentally, increasing KaiA raises Q~10~ and weakens compensation [@itomiwa2020]. The model of Hatakeyama and Kaneko, in which competition for KaiA produces compensation, also predicted this experimental direction [@hatakeyama2012]. The discrepancy may be related to the fact that increasing KaiA lengthens the period in the Rust model, with a control coefficient of `{python} f"{C_all['KAIA']:+.2f}"`. A different KaiABC model that represents KaiA concentration effects in more detail reproduces the dependence of Q~10~ on KaiA concentration [@fu2024].
+
+Within the Rust model, then, neither stopping temperature nor entrainment clearly distinguishes the division-of-labor and coupled strategies. None reproduces the gradual disappearance of amplitude observed experimentally. Even adding amplitude and phase response to period compensation leaves it difficult to identify a unique model design from the experiments. And so far, all activation energies have been chosen by us.
+
+## Building a ledger from measured values {#sec-measured}
+
+What are the activation energies of actual KaiABC reactions? In a recent preprint, Liu and colleagues estimated the rates of individual KaiC phosphorylation and dephosphorylation steps by fitting measurements separately at 20 and 30 °C [@liu2026]. Their supplementary tables list ratios of rates at 30 versus 20 °C for reactions closely corresponding to those in the Rust model.
+
+Liu and colleagues' "KaiA-dependent" rates correspond to the KaiA-bound rates $k^{\mathrm{bound}}$ in @eq-kxy2, and their "baseline" rates correspond to $k^{\mathrm{free}}$. The parameter describing KaiA's effect corresponds to $K_{1/2}$. Their model, however, is based on the Phong model [@phong2013], an extension of the Rust model, and its reference rates differ somewhat. Some tabulated estimates also have large standard errors. For example, the KaiA-bound T → ST and ST → T rates are estimated to fall to less than one fifth upon warming, and the standard error for T → ST at 30 °C exceeds the estimated rate itself. Liu and colleagues selected two well-determined phosphorylation steps and three dephosphorylation steps, incorporating the temperature dependences of these five rates into their model. We follow that choice, assigning temperature dependence to only those five rates and treating the others as temperature-independent. Their model does not include temperature dependence of $K_{1/2}$, so we add that separately for comparison.
+
+```{python}
+#| label: measured
+# Liu et al. (2026), supplementary Table S1: rate ratios at 30 °C versus 20 °C (KaiA-dependent rates are for KaiA-bound states)
+liu_ratio = {"UT_b": 1.60, "TD_b": 0.06, "SD_b": 1.31, "US_b": 1.17, "TU_b": 1.16, "DT_b": 0.20,
+             "TU_f": 1.37, "DS_f": 2.60, "SU_f": 5.80}
+liu_ratio_K = 1.38                                            # Constant governing the effect of KaiA (K½)
+liu_used = ["UT_b", "US_b", "TU_f", "DS_f", "SU_f"]           # Values used in Liu et al.'s model (red in their table)
+liu_dissoc = 3.49                                             # Table S2: KaiA-mediated dissociation of the KaiB–KaiC complex
+
+def E_from_fold(fold, T1=20.0, T2=30.0):
+    """Activation energy (kJ/mol) for a rate multiplied by fold from T1 to T2."""
+    return R_GAS * np.log(fold) / (1 / (T1 + 273.15) - 1 / (T2 + 273.15))
+
+E_all = {n: E_from_fold(liu_ratio[n]) for n in RATE_NAMES}
+E_liu = {n: (E_all[n] if n in liu_used else 0.0) for n in RATE_NAMES}
+H_liu = E_from_fold(liu_ratio_K)
+led_liu = sum(C[n] * E_liu[n] for n in RATE_NAMES)
+led_liu_K = led_liu + C_all["KHALF"] * H_liu
+aled_liu = sum(CA[n] * E_liu[n] for n in RATE_NAMES)
+aled_liu_K = aled_liu + CA_all["KHALF"] * H_liu
+q10_from_ledger = lambda L: np.exp(-L * 10 / (R_GAS * (T_REF + 273.15) ** 2))   # Estimate period Q10 from the ledger
+E_dissoc = E_from_fold(liu_dissoc)
+# Alternative rate selections: adding S→ST, or including all nine rates (including negative activation energies)
+led_plus_SD = led_liu + C["SD_b"] * E_all["SD_b"]
+led_all9 = sum(C[n] * E_all[n] for n in RATE_NAMES)
+led_all9_K = led_all9 + C_all["KHALF"] * H_liu
+
+temps_m = np.arange(15.0, 40.01, 0.5)
+cases_m = [(E_liu, 0.0), (E_liu, H_liu)]
+per_m, amp_m = period_amp([at_temperature(p_ref, T, E, H) for E, H in cases_m for T in temps_m],
+                          t_end=4000, t_skip=2500)
+per_m = per_m.reshape(len(cases_m), -1)
+amp_m = amp_m.reshape(len(cases_m), -1)
+i30_m = np.argmin(abs(temps_m - 30))
+i25_m = np.argmin(abs(temps_m - 25))
+range_m = [(temps_m[np.isfinite(r)].min(), temps_m[np.isfinite(r)].max()) for r in per_m]
+```
+
+```{python}
+#| label: tbl-liu
+#| tbl-cap: "Values from Table S1 of Liu et al. (2026), mapped onto reactions in the Rust model. Ratios compare rates at 30 °C and 20 °C. Control coefficients are from the Rust model at 30 °C. ○ marks values used in Liu et al.'s own model."
+#| tbl-colwidths: [26, 14, 18, 14, 16, 12]
+lines = ["| Reaction | 30 °C / 20 °C | Activation energy (kJ/mol) | Control coefficient C | Contribution C×E (kJ/mol) | Used |",
+         "|:--|--:|--:|--:|--:|:--:|"]
+for n in RATE_NAMES:
+    lines.append(f"| {LABELS[n]} | {liu_ratio[n]:.2f} | {E_all[n]:.0f} | {C[n]:+.2f} | {C[n] * E_all[n]:+.0f} | "
+                 f"{'○' if n in liu_used else '—'} |")
+lines.append(f"| K½ (constant governing the effect of KaiA) | {liu_ratio_K:.2f} | {H_liu:.0f} | {C_all['KHALF']:+.2f} | "
+             f"{C_all['KHALF'] * H_liu:+.0f} | — |")
+Markdown("\n".join(lines))
+```
+
+```{python}
+#| label: fig-measured-ledger
+#| fig-cap: "Contributions of the five rates used in Liu et al.'s model to the period ledger (left) and amplitude ledger (right). The bottom row shows the contribution of K½ if it is included."
+#| fig-width: 9
+#| fig-height: 3.8
+#| code-fold: true
+#| code-summary: "Figure code"
+rows_m = liu_used + ["KHALF"]
+lab_m = [LABELS[n] for n in liu_used] + ["K½ (if included)"]
+vals_P = [C[n] * E_liu[n] for n in liu_used] + [C_all["KHALF"] * H_liu]
+vals_A = [CA[n] * E_liu[n] for n in liu_used] + [CA_all["KHALF"] * H_liu]
+fig, axes = plt.subplots(1, 2, sharey=True)
+for ax, vals, title, tot in ((axes[0], vals_P, "Period ledger", led_liu), (axes[1], vals_A, "Amplitude ledger", aled_liu)):
+    colors = [ORANGE if v > 0 else BLUE for v in vals]
+    bars = ax.barh(lab_m[::-1], vals[::-1], color=colors[::-1], height=0.6)
+    bars[0].set_alpha(0.45)
+    ax.axvline(0, color=INK2, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.set_title(f"{title} (sum of 5: {tot:+.0f} kJ/mol)", fontsize=10.5, loc="left")
+    ax.set_xlabel("Contribution (kJ/mol)")
+    ax.grid(axis="y", visible=False)
+fig.tight_layout()
+plt.show()
+```
+
+These estimates remain open to debate. Earlier studies reported that KaiC phosphorylation and dephosphorylation rates were largely temperature-independent [@tomita2005; @nakajima2005]. Liu and colleagues argue that those measurements covered too short a time and did not distinguish modification at individual sites. Because S431 dephosphorylates only after T432, they suggest that its temperature dependence becomes apparent only over longer observations. The inputs used here should therefore be regarded as unsettled.
+
+@tbl-liu and @fig-measured-ledger show that the clock's components are indeed temperature-sensitive under these estimates. Two dephosphorylation steps stand out: ST → S without KaiA, at approximately `{python} f"{E_all['DS_f']:.0f}"` kJ/mol, and S → U, at approximately `{python} f"{E_all['SU_f']:.0f}"` kJ/mol. The period ledger does not balance. ST → S also has a large control coefficient, `{python} f"{C['DS_f']:+.2f}"`, so it alone contributes `{python} f"{C['DS_f'] * E_all['DS_f']:+.0f}"` kJ/mol. The five rates sum to `{python} f"{led_liu:+.0f}"` kJ/mol, or `{python} f"{led_liu_K:+.0f}"` kJ/mol with $K_{1/2}$. This value depends strongly on which estimates are included. Adding S → ST, whose rate ratio is 1.31, gives `{python} f"{led_plus_SD:+.0f}"` kJ/mol. Including all nine rates, including the negative activation energies for T → ST and ST → T, gives `{python} f"{led_all9:+.0f}"` kJ/mol, or `{python} f"{led_all9_K:+.0f}"` kJ/mol with $K_{1/2}$. The deficit varies severalfold with the selection, but the ledger is negative in every case. Using the same five rates as Liu and colleagues, the ledger predicts a period Q~10~ of `{python} f"{q10_from_ledger(led_liu):.1f}"`–`{python} f"{q10_from_ledger(led_liu_K):.1f}"`, making the clock even more temperature-sensitive than the all-50-kJ/mol clock of Section 5, whose Q~10~ was about 1.9.
+
+```{python}
+#| label: fig-measured-temp
+#| fig-cap: "Temperature dependence of period (left) and amplitude (right) in the model using Liu et al.'s measurements, normalized to their values at 30 °C. Points show experiments: periods from Nakajima et al. (2005) and amplitudes from Murayama et al. (2017)."
+#| fig-width: 10
+#| fig-height: 3.9
+#| code-fold: true
+#| code-summary: "Figure code"
+fig, ax = plt.subplots(1, 2)
+for k, (lab, c) in enumerate((("5 rates", "#5f9de0"), ("5 rates + K½", "#1f5fae"))):
+    ax[0].plot(temps_m, per_m[k] / per_m[k, i30_m], color=c, label=lab)
+    ax[1].plot(temps_m, amp_m[k] / amp_m[k, i30_m], color=c, label=lab)
+ax[0].plot([25, 30, 35], np.array([22, 21, 20]) / 21, "s", color="#0b0b0b", ms=6, label="Nakajima et al. 2005")
+ax[0].set(xlim=(15, 40), ylim=(0.5, 4.5), xlabel="Temperature (°C)", ylabel="Period / period at 30 °C")
+ax[0].legend(fontsize=8.5)
+ax[1].plot(murayama[:, 0], murayama[:, 2] / murayama[-1, 2], "o", color="#0b0b0b", ms=5, label="Murayama et al. 2017")
+ax[1].set(xlim=(15, 40), ylim=(-0.05, 2.5), xlabel="Temperature (°C)", ylabel="Amplitude / amplitude at 30 °C")
+ax[1].legend(fontsize=8.5, loc="upper right")
+fig.tight_layout()
+plt.show()
+```
+
+Running the model (@fig-measured-temp) confirms the ledger's prediction: the period increases sharply on cooling. At 25 °C, it is `{python} f"{per_m[0, i25_m] / per_m[0, i30_m]:.1f}"` times the 30 °C value, or `{python} f"{per_m[1, i25_m] / per_m[1, i30_m]:.1f}"` times with $K_{1/2}$ included, and oscillations persist only from `{python} f"{range_m[0][0]:.1f}"` to `{python} f"{range_m[0][1]:.1f}"` °C. The amplitude ledger is also negative, `{python} f"{aled_liu:+.0f}"` kJ/mol, so amplitude decreases as temperature rises. Both period and amplitude behave contrary to the experimental observations. Liu and colleagues likewise report that including only the temperature dependences of reaction rates in their model makes the period increase substantially on cooling.
+
+The ledger is therefore missing a large positive contribution. If all reactions accelerate with temperature, only reactions with positive control coefficients—those that lengthen the period when accelerated—can supply it. As noted in Section 3, negative apparent activation energies or changes in equilibrium constants provide other possibilities. The deficit shrinks when all nine rates are included because T → ST combines a negative activation energy with a negative control coefficient, giving a positive contribution. Within the Rust model, S → ST is the principal period-lengthening candidate. But its measured ratio of 1.31 corresponds to only about `{python} f"{E_all['SD_b']:.0f}"` kJ/mol, contributing just `{python} f"{C['SD_b'] * E_all['SD_b']:+.0f}"` kJ/mol when included.
+
+Liu and colleagues identify a candidate for the missing term outside the Rust model: KaiA-mediated dissociation of the KaiB–KaiC complex. According to their supplementary Table S2, this rate increases `{python} f"{liu_dissoc:.2f}"`-fold between 20 and 30 °C, corresponding to an activation energy of approximately `{python} f"{E_dissoc:.0f}"` kJ/mol. They identify this as a reaction of the kind described by Fu and colleagues: one that lengthens the period when accelerated [@liu2026; @fu2024]. A simple division suggests that a period control coefficient of roughly `{python} f"{-led_liu / E_dissoc:.1f}"`–`{python} f"{-led_liu_K / E_dissoc:.1f}"` for this process could fill the deficit. This is not a self-consistent estimate, however. Adding a reaction changes the control coefficients of other reactions so that the summation theorem, @eq-sum, remains satisfied. If the new reaction has a coefficient of +1.2, for instance, the remaining coefficients must sum to −2.2. If that additional negative control falls on temperature-sensitive dephosphorylation, the deficit itself grows. The value 1.1–1.3 must therefore not be treated as a biological estimate. We can say only that the proposed term has the right sign and a plausible order of magnitude. The Rust model compresses formation and dissociation of the KaiB–KaiC complex into the instantaneous relation "S sequesters KaiA," @eq-freeA, so this term is absent by construction. In ledger terms, Liu and colleagues' model becomes compensated only after including the temperature dependence of the KaiA–KaiB switch because this supplies a positive term.^[The same Table S2 also fits an 8.8-fold increase from 20 to 30 °C for complex dissociation without KaiA, implying strong temperature dependence. This conflicts with Simon and colleagues' measurement that dissociation without KaiA is almost temperature-independent [@simon2022]. Liu and colleagues themselves cite that earlier conclusion in their main text. Individual fitted estimates therefore require caution.]
+
+This ledger suggests a possible picture. Temperature-sensitive dephosphorylation, ST → S and S → U, acts to shorten the period, while a temperature-sensitive KaiA–KaiB switch acts to lengthen it; a small number of steps cancel one another. Because the switch also determines amplitude [@liu2026], period compensation and amplitude changes arise from the same mechanism. In the terminology of Section 9, this is a coupled strategy concentrated in a few steps. The strongest support for this picture does not come from our ledger calculation, however. It comes from Liu and colleagues' experiments with a mutant whose phosphorylation state is fixed, KaiC-EE, demonstrating history dependence, or bistability, through KaiA–KaiB antagonism, together with their reproduction of temperature compensation in a model containing that behavior. Our ledger calculation is best viewed as an aid to interpreting those results.
+
+Under this mapping to the Rust model, the division-of-labor assumption—that period-controlling reactions are temperature-insensitive—is also inconsistent with the strongly controlling ST → S reaction having an activation energy of about `{python} f"{E_all['DS_f']:.0f}"` kJ/mol. But these control coefficients belong to the Rust model. Because it lacks ATPase, it may concentrate period control in ST → S. In the mutants studied by Furuike and colleagues, ATPase temperature dependence and clock-frequency temperature dependence change together [@furuike2022], suggesting that a substantial fraction of period control in the actual clock resides in ATPase. If so, the ST → S control coefficient, and hence the ledger deficit, would be smaller.
+
+This inference rests on several assumptions. We have used control coefficients from the Rust model. The measurements cover only two temperatures, 20 and 30 °C, and some fitted estimates are poorly constrained. The switch's control coefficient cannot be calculated in the Rust model. An unbalanced ledger can reflect not only missing reactions but also differences in how models distribute control, how processes are grouped into reactions, and uncertainty in the estimated values. Within this mapping, we can conclude that the measured components alone do not reproduce compensation, that the missing contribution's sign agrees with the switch described by Liu and colleagues, and that this motivates testing a model with an explicit switch. Even with these limits, the ledger makes concrete what should be investigated next.
+
+## Discussion: viewing the actual clock through its ledgers {#sec-discussion}
+
+We have organized ways of balancing the period ledger into three strategies: uniformly insensitive, coupled, and division of labor. Again, these categories are a conceptual aid; the same mechanism may appear in different categories depending on the level at which it is examined. With that in mind, let us read recent findings in the language of ledgers.
+
+First is the view that KaiC ATPase sets the period. Mutants with disrupted ATPase temperature compensation also show disrupted compensation of clock frequency in the same direction [@furuike2022]. A preprint proposes a mechanism for compensation of ATPase itself [@itomiwa2026]: ADP release determines the ATPase rate, and warming shifts KaiC toward the ADP-bound state, offsetting the acceleration of hydrolysis. This is cancellation within a molecule, but from the whole clock's perspective it is a temperature-insensitive component that determines the period. The same preprint reports that ATPase rhythm amplitude is temperature-sensitive, with Q~10~ ≈ 2.1. A temperature-insensitive period-setting component, with temperature sensitivity expressed through amplitude, resembles the division-of-labor strategy. As stressed in Section 7, it differs from a uniformly insensitive strategy in which every reaction is insensitive. The ATPase–period relationship is not simple, however. Changing pH can shift the period from approximately 15 to 36 hours while ATPase activity changes by only about 15%, with temperature compensation preserved [@itomiwa2025]. Furthermore, as discussed in Section 11, phosphorylation and dephosphorylation steps are themselves temperature-sensitive and require compensation somewhere in addition to ATPase. The report that compensation of KaiC-alone ATPase breaks down between 4 and 20 °C, with Q~10~ = 1.39 [@itomiwa2026], also raises the question of whether this is related to the clock stopping near 19 °C.
+
+A second view regards amplitude changes themselves as part of compensation, corresponding to the coupled strategy. Ruoff and colleagues argued that a compensated oscillator must traverse a larger orbit as temperature rises to maintain the same period [@ruoff2003]. Kurosawa and colleagues likewise derived from mathematical models a relationship in which maintaining period requires amplitude to increase with temperature [@kurosawa2017]. Liu and colleagues' switch is a KaiABC example, and the measured-value ledger in Section 11 was consistent with this picture. A model incorporating the relationship between KaiC's hexameric structure and its reactions also proposes that warming increases amplitude and period in a way that offsets reaction acceleration [@sasai2022]. Temperature-dependent conformational changes in KaiB itself have also been discussed as contributors to compensation [@zhang2024]. Proteins such as KaiB that interconvert between two folds often show partial unfolding of one fold at low temperature, and this sensitivity has been proposed as an adaptation to environmental temperature [@liwang2025].
+
+The views of François and colleagues and of Kidd and colleagues, introduced in Section 9, are closer to division of labor. In *Drosophila*, both the mean abundance and oscillation amplitude of the clock protein TIM rise with temperature; amplitude approximately doubles between 18 and 29 °C. Kidd and colleagues report unchanged waveform and phase relationships between components, interpreting this as evidence for a temperature-insensitive core oscillator coupled to a dedicated temperature-sensing pathway [@kidd2015]. A reanalysis of the same data, however, reports greater waveform distortion at higher temperature [@gibo2025].
+
+These views are not mutually exclusive. Components compensated within a molecule, such as ATPase, can coexist in the same clock with components that affect both period and amplitude, such as a switch. They may even be different aspects of the same molecular process. According to Ito-Miwa and colleagues' preprint, within the KaiB–KaiC complex, KaiA accelerates ADP-to-ATP exchange in KaiC's CI domain, stimulating CI ATPase activity and promoting KaiB dissociation [@itomiwa2026]. KaiA-mediated complex dissociation, the candidate missing positive term in Section 11, may thus be connected to ATPase nucleotide state through a single process. In *Neurospora*, temperature-dependent changes in clock-protein abundance have been proposed to mediate temperature-induced phase shifts [@liu1998]. Earlier modeling also showed that a temperature-compensated oscillator can become damped at low temperature and entrain to temperature cycles of only about 1 °C [@ruoff1996].
+
+Some questions remain. Fu and colleagues showed that compensation through period-lengthening reactions works more readily far from a bifurcation [@fu2024]. Yet, as discussed in Section 9, the in vitro clock appears to operate relatively near a Hopf bifurcation even over 20–30 °C. Approximate proportionality of amplitude squared to temperature alone does not establish that it is too close for the mechanism of Fu and colleagues to operate, and their argument does not prohibit compensation near a bifurcation. How individual reaction contributions change in that regime remains insufficiently explained by this model.
+
+Finally, we should keep the model's limitations in view. The Rust model contains neither KaiC ATPase nor hexameric structure, KaiB conformational changes, or the bistability identified by Liu and colleagues. Its amplitude control coefficients depend strongly on the sharp KaiA sequestration switch in @eq-freeA, making the amplitude ledger's values specific to this model. The role of U → T as a temperature sensor is likewise a model-specific result. In living cells, transcription–translation feedback and output pathways transmitting clock information to gene expression are also coupled to the clock [@chavan2021]. The ledger perspective nevertheless applies beyond these model details. Calculating period, amplitude, and phase-response sensitivities and weighting them by activation energies provides a common measure for comparing which reactions maintain the clock's pace and which sense temperature.
+
+## Conclusion {#sec-conclusion}
+
+Let us return to the three properties introduced in Section 1. Temperature compensation could be expressed as a balanced period ledger, @eq-tc. Stopping at low temperature was connected to the amplitude ledger in @eq-dlnA, and entrainment to temperature cycles to the phase-response ledger in @eq-gamma. In both the amplitude and phase-response ledgers, deviations from the mean activation energy are what matter. A temperature-dependent amplitude therefore means that temperature does more than uniformly fast-forward the system; and a clock with identical activation energies cannot entrain to temperature cycles, however strongly its rate responds to temperature.
+
+The central point of this article is that period compensation alone does not identify its mechanism. There are many ways to make the period ledger zero. As Sections 9 and 10 showed, even amplitude and phase response may not uniquely identify a model's design. But placing period, amplitude, phase response, and measured temperature dependences of individual reactions in the same ledger can narrow down the processes missing from a model and turn them into concrete, testable hypotheses.
+
+Section 11 attempted exactly that. Inserting measured reaction temperature dependences into the ledger showed that the phosphorylation and dephosphorylation components alone did not balance it or reproduce compensation. The missing contribution had to be positive, on the period-lengthening side, consistent with the properties of KaiA-mediated dissociation of the KaiB–KaiC complex: a temperature-sensitive switch. This is a hypothesis to test in a model that includes the switch explicitly. Our opening question was why a clock can be insensitive to temperature when its components are sensitive. In ledger terms, there is no contradiction: the contributions of temperature-sensitive components can cancel. Constructing the ledger gives us a concrete way to look for the compensating partner.
+
+A clock made from three proteins in a test tube offers a rare setting in which to address these questions in both molecular and mathematical terms. All the code is included on this page. Try replacing the measured values or changing which reactions are temperature-sensitive, and build your own ledger.
+
+## Appendix: computing environment {.unnumbered}
+
+The structural data in @fig-kaic come from the mmCIF file for Protein Data Bank entry 1TF7 ([1TF7.cif](https://files.rcsb.org/download/1TF7.cif), CC0). This English version reads the shared copy at `../../../posts/2026-10-16/1TF7.cif` relative to the article's directory. If running the code elsewhere, download the file and adjust that path.
+
+```{python}
+#| label: environment
+import sys, scipy, matplotlib, Bio
+print(f"Python {sys.version.split()[0]} / NumPy {np.__version__} / SciPy {scipy.__version__} / "
+      f"Matplotlib {matplotlib.__version__} / Biopython {Bio.__version__}")
+```
+
+
+## References {.unnumbered}
+
+::: {#refs}
+:::

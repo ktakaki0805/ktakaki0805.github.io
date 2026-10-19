@@ -3,6 +3,7 @@
 **/*.quarto_ipynb
 /index_files/
 /posts/*/index_files/
+/en/posts/*/index_files/
 .DS_Store
 /.venv/
 __pycache__/

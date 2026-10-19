@@ -17,6 +17,36 @@ mise run render           # _site/ に書き出す
 
 Quarto・Python・uv の版を上げるときは、`mise.toml` の数字を書き換えて `mise install` します。
 
+## 日本語版・英語版
+
+日本語版は従来の `/`、英語版は `/en/` にあります。ナビバーの **English / 日本語** で切り替えられます。
+
+- 初回はブラウザーの優先言語を上から順に調べ、最初に見つかった日本語か英語を選びます。どちらもない場合は英語を選びます。
+- 手動で選んだ言語をブラウザーに保存し、次回以降はその選択を優先します。保存できない環境でも `?lang=ja` / `?lang=en` で選択を維持します。`?lang=auto` で保存した選択を解除できます。
+- 対応する翻訳があるページ間で切り替えます。未翻訳の記事を自動で記事一覧へ飛ばすことはありません。その記事の **English** リンクは英語版の記事一覧に移動します。
+- JavaScript を無効にしても各言語のページと切り替えリンクを利用できます。自動選択と選択の保存には JavaScript が必要です。
+
+記事の英訳は、日本語版と同じフォルダ名で `en/posts/<日付>/index.qmd` に置きます。`en/posts/_metadata.yml` から `lang: en` と記事用の設定を引き継ぎます。図や文献は英語版の記事からの相対パスで指定し、見出しの `{#sec-…}` などの ID は日本語版とそろえると、切り替え時に同じ節へ移動できます。
+
+```text
+posts/2026-10-08/index.qmd      日本語 → /posts/2026-10-08/
+en/posts/2026-10-08/index.qmd   英語   → /en/posts/2026-10-08/
+```
+
+英語版の一覧では英訳を優先し、未翻訳の記事は **Japanese** と明示して掲載します。既存の記事本文は日本語のままです。英訳前でも、記事の front matter または記事と同じフォルダの `_metadata.yml` に次の項目を設定すると、英語版の一覧に英語のタイトルとタグを表示できます。
+
+```yaml
+title-en: "Article title"
+subtitle-en: "Optional subtitle"
+categories-en: [Machine learning, Gaussian processes]
+```
+
+`categories-en` は日本語の `categories` と同じ順に書きます。タグ一覧は両言語のタグ名をアンカーとして受け付けるため、言語を切り替えても同じタグを参照できます。RSS は従来の日本語記事用 `/index.xml` を共通で案内します。
+
+一覧の翻訳には [Quarto のテンプレートパラメーター](https://quarto.org/docs/websites/website-listings-custom.html#template-parameters)を使っています。書き出し後に `scripts/localize.py` がナビゲーションと翻訳先のリンクを整え、`assets/language.js` が読者の言語を選択します。翻訳先には実際に生成されたページだけを使うため、未公開の英訳へ誘導することはありません。
+
+言語選択の回帰テストは `node tests/language.test.cjs`、生成処理のテストは `python3 -m unittest discover -s tests` で実行できます（Node.js はテスト用で、サイトの生成には不要です）。
+
 ## 記事を書く
 
 `posts/<日付>/index.qmd` を作ります。図や文献のファイルは同じフォルダに置きます。同じ日に2本目の記事を書くときは、`posts/2026-10-08-2/` のように番号を付けます。
@@ -98,11 +128,15 @@ pyproject.toml / uv.lock  記事の中で実行する Python のパッケージ
 _quarto.yml               サイト全体の設定（ナビ、言語、数式、引用の形式など）
 index.qmd                 トップ（記事一覧）
 tags/index.qmd            タグ一覧（URL は /tags/）
+en/                       英語版の記事一覧・タグ一覧・記事。日本語版と同じ記事のフォルダ名を使う
 posts/                    記事（記事ごとのフォルダに index.qmd・図・references.bib）。posts/_metadata.yml は全記事に共通の設定
 styles/blog.scss          デザイン（書体、色、版面、ダークモード）
 _templates/               記事の見出しブロックと、一覧・タグのテンプレート
 filters/                  「図1」「式 (3)」「第4節」などの表記を整える処理と、読了目安の計算
 assets/                   数式の設定、favicon、APA 形式の引用スタイル
+assets/language.js        ブラウザーの言語選択と手動選択の保存
+scripts/localize.py       生成されたページのナビゲーション・言語切り替え・翻訳先の整備
+tests/                    言語選択と生成処理の回帰テスト
 _quarto-drafts.yml        下書きも表示するための設定（--profile drafts）
 _quarto-production.yml    本番だけの設定（Google Analytics）。GitHub Actions が QUARTO_PROFILE=production で読み込む
 ```

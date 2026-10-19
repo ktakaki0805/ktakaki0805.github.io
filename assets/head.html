@@ -4,6 +4,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <script>
+  // Custom listings have no List.js container, but Quarto's hash handler still
+  // expects the registry when readers follow tag anchors.
+  window['quarto-listings'] = window['quarto-listings'] || {};
+
   // MathJax v4: typeset formulas in STIX Two so they match the Latin body text.
   window.MathJax = {
     output: { font: 'mathjax-stix2', displayOverflow: 'scroll' },

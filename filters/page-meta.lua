@@ -41,6 +41,8 @@ function Pandoc(doc)
     offset = quarto.project.offset
   end
   doc.meta["site-root"] = pandoc.MetaString(offset .. "/")
+  local lang = doc.meta.lang and pandoc.utils.stringify(doc.meta.lang) or "ja"
+  doc.meta["locale-root"] = pandoc.MetaString(offset .. (lang:sub(1, 2) == "en" and "/en/" or "/"))
 
   if doc.meta.categories then
     local links = pandoc.List()
@@ -55,7 +57,6 @@ function Pandoc(doc)
   end
 
   if doc.meta.date == nil then return doc end
-  local lang = doc.meta.lang and pandoc.utils.stringify(doc.meta.lang) or "ja"
   local cjk, words = count(doc.blocks)
   local label
   if lang:sub(1, 2) == "ja" then

@@ -6,11 +6,12 @@ toc: false
 number-sections: false
 listing:
   id: posts
-  contents: posts
+  contents: "posts/*/index.qmd"
   sort: "date desc"
   template: _templates/post-list.ejs
   date-format: "YYYY年M月D日"
   fields: [title, subtitle, date, categories]
   page-size: 1000
-  feed: true
+  feed:
+    language: ja
 ---

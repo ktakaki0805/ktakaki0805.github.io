@@ -3,6 +3,10 @@ project:
   output-dir: _site
   render:
     - "*.qmd"
+  resources:
+    - assets/language.js
+  post-render:
+    - python3 scripts/localize.py
 
 # Python などのコードを実行する記事は、手元で計算した結果（_freeze/）をコミットし、
 # GitHub Actions では再計算しない

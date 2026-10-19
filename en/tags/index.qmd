@@ -1,0 +1,15 @@
+---
+title: "Tags"
+toc: false
+number-sections: false
+listing:
+  id: tags
+  contents: "../../**/posts/*/index.qmd"
+  sort: "date desc"
+  template: ../../_templates/tag-list.ejs
+  template-params:
+    lang: en
+  date-format: "MMMM D, YYYY"
+  fields: [title, date, categories, lang, title-en, categories-en]
+  page-size: 1000
+---

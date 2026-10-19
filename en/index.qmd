@@ -1,0 +1,16 @@
+---
+title: "ktakaki0805"
+hide-title-block: true
+toc: false
+number-sections: false
+listing:
+  id: posts
+  contents: "../**/posts/*/index.qmd"
+  sort: "date desc"
+  template: ../_templates/post-list.ejs
+  template-params:
+    lang: en
+  date-format: "YYYY MMM D"
+  fields: [title, subtitle, date, categories, lang, title-en, subtitle-en, categories-en]
+  page-size: 1000
+---

@@ -5,3 +5,4 @@
 /posts/*/index_files/
 .DS_Store
 /.venv/
+__pycache__/

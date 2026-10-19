@@ -3,14 +3,40 @@
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const plain = (s) => esc(String(s ?? '').replace(/[*_`$]/g, ''));
 const slug = (t) => 'tag-' + String(t).toLowerCase().replace(/\s+/g, '-');
+const lang = templateParams?.lang || 'ja';
+const en = lang === 'en';
+const postKey = (item) => item.path.replace(/^.*?\bposts\//, '');
+const translations = new Set(items.filter((item) => item.lang === 'en').map(postKey));
+const posts = items.filter((item) => !en || item.lang === 'en' || !translations.has(postKey(item)))
+  .map((item) => en && item.lang !== 'en' ? {
+    ...item,
+    title: item['title-en'] || item.title,
+    categories: item['categories-en'] || item.categories,
+    japaneseOnly: true,
+  } : item);
 
 const groups = {};
-for (const item of items) for (const c of (item.categories || [])) (groups[c] = groups[c] || []).push(item);
-const tags = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b, 'ja'));
+for (const item of posts) for (const c of (item.categories || [])) (groups[c] = groups[c] || []).push(item);
+const tags = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b, lang));
+// Keep tag anchors usable when switching between translated category names.
+const aliases = {};
+const assignedAliases = new Set(tags.map(slug));
+for (const item of items) {
+  (item.categories || []).forEach((name, i) => {
+    const translated = (item['categories-en'] || [])[i];
+    if (!translated) return;
+    const canonical = en ? translated : name;
+    const alias = slug(en ? name : translated);
+    if (groups[canonical] && !assignedAliases.has(alias)) {
+      (aliases[canonical] ||= []).push(alias);
+      assignedAliases.add(alias);
+    }
+  });
+}
 %>
 ```{=html}
 <div class="home-grid column-page-left">
-<nav class="home-nav" aria-label="タグ一覧">
+<nav class="home-nav" aria-label="<%= en ? 'Tags' : 'タグ一覧' %>">
 <ul class="tag-index">
 <% for (const t of tags) { %>
 <li><a href="#<%= esc(slug(t)) %>"><span><%= esc(t) %></span><span class="count"><%= groups[t].length %></span></a></li>
@@ -18,18 +44,22 @@ const tags = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].len
 </ul>
 </nav>
 <div class="tag-sections">
+<% if (posts.some((item) => item.japaneseOnly)) { %>
+<p class="post-language-note">Posts marked “Japanese” are currently available in Japanese only.</p>
+<% } %>
 <% if (!tags.length) { %>
-<p class="post-list-empty">まだタグはありません。</p>
+<p class="post-list-empty"><%= en ? 'No tags in English yet.' : 'まだタグはありません。' %></p>
 <% } %>
 <% for (const t of tags) { %>
 <section class="tag-section" id="<%= esc(slug(t)) %>">
-<h2 class="tag-section-title"><span><%= esc(t) %></span><span class="count"><%= groups[t].length %>件</span></h2>
+<% for (const alias of (aliases[t] || [])) { %><span id="<%= esc(alias) %>" aria-hidden="true"></span><% } %>
+<h2 class="tag-section-title"><span><%= esc(t) %></span><span class="count"><%= groups[t].length %><%= en ? (groups[t].length === 1 ? ' post' : ' posts') : '件' %></span></h2>
 <ol>
 <% for (const item of groups[t]) { %>
 <li>
 <a class="tag-item" href="<%- item.path %>">
 <span class="tag-item-date"><%= esc(item.date) %></span>
-<span class="tag-item-title"><%= plain(item.title) %></span>
+<span class="tag-item-title"><%= plain(item.title) %><% if (item.japaneseOnly) { %> <span class="post-language-label">Japanese</span><% } %></span>
 </a>
 </li>
 <% } %>

@@ -15,8 +15,14 @@ execute:
 
 website:
   title: "ktakaki0805"
-  site-url: "https://ktakaki0805.github.io"
+  site-url: &site-url "https://ktakaki0805.github.io"
   description: "ktakaki0805"
+  image: /assets/ogp.png
+  image-alt: "ktakaki0805"
+  open-graph:
+    locale: ja_JP
+  twitter-card:
+    card-style: summary_large_image
   favicon: assets/favicon.svg
   search: false
   draft-mode: gone
@@ -37,6 +43,9 @@ website:
         href: index.xml
       - text: GitHub
         href: https://github.com/ktakaki0805
+
+# Quarto は website の設定を Lua に渡さないため、同じ URL をフィルターにも渡す。
+social-site-url: *site-url
 
 lang: ja
 date-format: "YYYY年M月D日"
@@ -80,6 +89,8 @@ format:
     anchor-sections: false
     smooth-scroll: true
     filters:
+      - at: pre-render
+        path: filters/social-meta.lua
       - at: pre-render
         path: filters/page-meta.lua
       - at: post-render

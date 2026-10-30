@@ -73,6 +73,31 @@ draft: true                           # 下書き。公開するときに消す
 
 一覧やタグのページでは、タイトルと副題は文字だけで表示します（`*` や `$` などの記号は取り除きます）。副題に数式を入れたいときは `𝒪(𝑛³)` のように Unicode の文字で書いてください。
 
+### OGP（SNS でのリンク表示）
+
+[Quarto の Social Metadata](https://quarto.org/docs/websites/website-tools.html#social-metadata) を使い、Open Graph と Twitter の大きな画像カードを有効にしています。記事の front matter、または同じフォルダの `_metadata.yml` に、説明文と画像を指定します。タイトルは記事の `title` が使われます。
+
+```yaml
+description: "SNS に表示する、記事の内容を簡潔に伝える説明文。"
+image: ogp.png
+image-alt: "記事のタイトル — ktakaki0805"
+```
+
+画像は記事と同じフォルダに置きます。英語版にも英語の説明文と画像を指定します。記事一覧・タグ一覧には、共通の `assets/ogp.png` を使います。
+
+白地にタイトルとサイト名だけを載せた PNG（1200 × 630px）は、次のコマンドで作れます。タイトルを変えたときも同じコマンドで画像を作り直します。
+
+```sh
+uv run python scripts/generate_ogp.py --title "記事のタイトル" --output posts/2026-10-08/ogp.png
+uv run python scripts/generate_ogp.py --title "Article title" --output en/posts/2026-10-08/ogp.png
+```
+
+画像の生成には日本語フォントが必要です。Ubuntu では `fonts-noto-cjk`、macOS ではヒラギノ、Windows では游ゴシックを使います。別のフォントは `--font /path/to/font.ttf` で指定できます。生成した PNG も記事と一緒にコミットするため、GitHub Actions での書き出し時にはフォントの追加は不要です。自分で用意した PNG や JPEG に差し替える場合も `image` で指定できます。
+
+`mise run render` 後に `_site/` の HTML の `og:image` と `twitter:image`、画像ファイルの出力を確認できます。公開先の URL には `_quarto.yml` の `website.site-url` が使われます。
+
+Quarto が出力しない `og:url` と `og:type` は `filters/social-meta.lua` で補います。記事ページは `article`、それ以外は `website` として共有されます。
+
 ### 使える書き方
 
 | 要素 | 書き方 | 表示 |
@@ -136,6 +161,7 @@ filters/                  「図1」「式 (3)」「第4節」などの表記を
 assets/                   数式の設定、favicon、APA 形式の引用スタイル
 assets/language.js        ブラウザーの言語選択と手動選択の保存
 scripts/localize.py       生成されたページのナビゲーション・言語切り替え・翻訳先の整備
+scripts/generate_ogp.py   タイトルとサイト名だけの OGP 画像を生成
 tests/                    言語選択と生成処理の回帰テスト
 _quarto-drafts.yml        下書きも表示するための設定（--profile drafts）
 _quarto-production.yml    本番だけの設定（Google Analytics）。GitHub Actions が QUARTO_PROFILE=production で読み込む

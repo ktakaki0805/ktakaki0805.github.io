@@ -330,6 +330,7 @@ dependencies = [
     { name = "nbclient" },
     { name = "nbformat" },
     { name = "numpy" },
+    { name = "pillow" },
     { name = "pyyaml" },
     { name = "scipy" },
 ]
@@ -342,6 +343,7 @@ requires-dist = [
     { name = "nbclient" },
     { name = "nbformat" },
     { name = "numpy" },
+    { name = "pillow" },
     { name = "pyyaml" },
     { name = "scipy" },
 ]

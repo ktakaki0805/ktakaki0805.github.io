@@ -10,6 +10,8 @@ dependencies = [
   "nbclient",
   "nbformat",
   "pyyaml",
+  # OGP 画像の生成
+  "pillow",
   # 記事で使うパッケージ
   "biopython",
   "matplotlib",

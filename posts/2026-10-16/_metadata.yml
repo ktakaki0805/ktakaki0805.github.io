@@ -2,3 +2,8 @@
 title-en: "Temperature compensation of circadian rhythms"
 subtitle-en: "Understanding temperature compensation in the cyanobacterial clock through equations and simulations"
 categories-en: [Systems biology, Circadian rhythms]
+
+# SNS で共有するときの説明文と画像。
+description: "温度が変わっても体内時計の周期がほぼ一定なのはなぜか。シアノバクテリアの KaiABC 時計を題材に、温度補償の仕組みを数式と Python シミュレーションで考えます。"
+image: ogp.png
+image-alt: "概日リズムの温度補償について — ktakaki0805"

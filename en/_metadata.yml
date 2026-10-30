@@ -1,2 +1,4 @@
 lang: en
+open-graph:
+  locale: en_US
 date-format: "MMMM D, YYYY"

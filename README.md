@@ -45,7 +45,7 @@ categories-en: [Machine learning, Gaussian processes]
 
 一覧の翻訳には [Quarto のテンプレートパラメーター](https://quarto.org/docs/websites/website-listings-custom.html#template-parameters)を使っています。書き出し後に `scripts/localize.py` がナビゲーションと翻訳先のリンクを整え、`assets/language.js` が読者の言語を選択します。翻訳先には実際に生成されたページだけを使うため、未公開の英訳へ誘導することはありません。
 
-言語選択の回帰テストは `node tests/language.test.cjs`、生成処理のテストは `python3 -m unittest discover -s tests` で実行できます（Node.js はテスト用で、サイトの生成には不要です）。
+言語選択の回帰テストは `node tests/language.test.cjs`、生成処理のテストは `uv run python -m unittest discover -s tests` で実行できます（Node.js はテスト用で、サイトの生成には不要です）。
 
 ## 記事を書く
 

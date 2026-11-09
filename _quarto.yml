@@ -5,8 +5,10 @@ project:
     - "*.qmd"
   resources:
     - assets/language.js
+  # python3 ではなく python と書く。Windows には python3.exe がなく、Microsoft Store の案内が動いてしまう。
+  # mise のタスクは uv run 経由なので、どの OS でも .venv の python が使われる
   post-render:
-    - python3 scripts/localize.py
+    - python scripts/localize.py
 
 # Python などのコードを実行する記事は、手元で計算した結果（_freeze/）をコミットし、
 # GitHub Actions では再計算しない
